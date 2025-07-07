@@ -1,0 +1,2561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>I2E Invoice Validator</title>
+    
+    <!-- External Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+    
+    <!-- I2E Modules -->
+    <script src="shared/i2e-common.js"></script>
+    <script src="shared/i2e-cache.js"></script>
+    <script src="shared/i2e-spy.js"></script>
+    
+    <!-- Shared Styles -->
+    <link rel="stylesheet" href="assets/i2e-styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header" style="position: relative;">
+            <h1>🔍 I2E Invoice Validator</h1>
+            <p>Compare invoiced amounts against internal employee costs and external supplier costs</p>
+            
+        </div>
+        
+        <!-- Tab Container -->
+        <div class="card">
+            <div class="tab-container">
+                <div class="tab-nav">
+                    <button class="tab-button active" onclick="switchTab('costdata')">Add Cost Data</button>
+                    <button class="tab-button" onclick="switchTab('pending')">Pending Invoices</button>
+                    <button class="tab-button" onclick="switchTab('overview')">Project Overview</button>
+                    <button class="tab-button" id="detailsTabBtn" onclick="switchTab('details')" style="display: none;">Invoice Details</button>
+                </div>
+                
+                <!-- Tab 1: Add Cost Data (NEW LANDING TAB) -->
+                <div id="costdataTab" class="tab-content active">
+                    <!-- Data Upload Section -->
+                    <div class="card" style="margin: 1rem 0;">
+                        <h3>Upload Cost Data Sources</h3>
+                        <p class="mb-2">Upload Excel files containing PPM data, EXT SAP data, and/or I2E invoices to compare against cached invoice data.</p>
+                        
+                        <!-- Status Display -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin: 1rem 0;">
+                            <!-- PPM Data Status -->
+                            <div class="upload-section">
+                                <h4>Internal Costs (PPM - All Details)</h4>
+                                <div class="file-info" id="ppmFileInfo">
+                                    <div class="file-status">No file loaded</div>
+                                    <div class="file-date">-</div>
+                                </div>
+                            </div>
+                            
+                            <!-- EXT SAP Data Status -->
+                            <div class="upload-section">
+                                <h4>External Costs (EXT SAP OE)</h4>
+                                <div class="file-info" id="extSapFileInfo">
+                                    <div class="file-status">No file loaded</div>
+                                    <div class="file-date">-</div>
+                                </div>
+                            </div>
+                            
+                            <!-- I2E Invoices Status -->
+                            <div class="upload-section">
+                                <h4>Invoiced Amounts (I2E Invoices)</h4>
+                                <div class="file-info" id="i2eFileInfo">
+                                    <div class="file-status status-success" id="i2eStatus">Using cached data</div>
+                                    <div class="file-date" id="i2eDate">From cache</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Single Upload Zone -->
+                        <div class="upload-zone" id="uploadZone">
+                            <div class="upload-icon">📊</div>
+                            <div class="upload-text">
+                                <strong>Drop Excel file(s) here or click to browse</strong>
+                                <br>
+                                <small>Supports single or multiple files with PPM - All details, EXT SAP (OE), and/or I2E Invoices tabs</small>
+                            </div>
+                            <input type="file" id="excelFile" class="file-input" accept=".xlsx,.xlsm" multiple>
+                        </div>
+                        
+                        <div class="text-center mt-2">
+                            <button class="btn btn-primary" id="processBtn" onclick="goToPendingInvoices()" disabled>
+                                ✅ Validate Invoices
+                            </button>
+                            <button class="btn" onclick="clearAllData()">🗑️ Clear All Data</button>
+                        </div>
+                        
+                        <!-- Info about cached invoices -->
+                        <div id="cacheInfoPanel" class="mt-2" style="background: #f0f9ff; padding: 1rem; border-radius: 8px; border-left: 4px solid #0ea5e9;">
+                            <div style="display: flex; align-items: center; gap: 1rem;">
+                                <span style="font-size: 1.2rem;">📋</span>
+                                <div>
+                                    <div style="font-weight: 500; color: #0c4a6e;">Cached Invoice Data</div>
+                                    <div id="cacheInfoText" style="font-size: 0.9rem; color: #075985;">Loading cached invoices...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                
+                <!-- Tab 3: Project Overview -->
+                <div id="overviewTab" class="tab-content">
+                    <!-- Validation Results -->
+                    <div class="card" id="validationResults" style="display: none;">
+                        <h3>WBS Overview & Validation Results</h3>
+                        
+                        <!-- Filter Controls -->
+                        <div class="filter-container">
+                            <div class="filter-row" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                                <div class="filter-input">
+                                    <label>Project Name Filter:</label>
+                                    <input type="text" id="projectFilter" placeholder="Type to filter projects..." onkeyup="filterProjects()" style="padding: 0.5rem; min-height: 2.5rem;">
+                                </div>
+                                <button class="btn" onclick="clearProjectFilter()">Clear</button>
+                                <button class="btn btn-success" onclick="exportValidationResults()">📊 Export Results</button>
+                            </div>
+                            
+                            <div class="filter-row" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                                <div class="filter-checkbox">
+                                    <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <input type="checkbox" id="pendingInvoicesFilter" checked onchange="filterProjects()">
+                                        <span>Filter on projects with pending invoices</span>
+                                    </label>
+                                </div>
+                                <button class="btn btn-primary" id="validateProjectBtn" onclick="validateSelectedProject()" disabled style="margin-left: auto;">
+                                    🔍 Validate invoices for this project
+                                </button>
+                            </div>
+                            
+                            
+                            <div id="filterResults" class="filter-results" style="display: none;">
+                                <!-- Filter summary will be shown here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Main Validation Table -->
+                        <div style="overflow-x: auto;">
+                            <table class="data-table" id="validationTable" style="min-width: 1000px;">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40px;">Select</th>
+                                        <th onclick="sortTable(1)" style="cursor: pointer; min-width: 120px;">WBS Code</th>
+                                        <th onclick="sortTable(2)" style="cursor: pointer; min-width: 200px;">Project Name</th>
+                                        <th onclick="sortTable(3)" style="cursor: pointer; min-width: 120px;">Internal Cost €</th>
+                                        <th onclick="sortTable(4)" style="cursor: pointer; min-width: 120px;">External Cost €</th>
+                                        <th onclick="sortTable(5)" style="cursor: pointer; min-width: 120px;">Total Cost €</th>
+                                        <th onclick="sortTable(6)" style="cursor: pointer; min-width: 130px;">Invoiced Amount €</th>
+                                        <th onclick="sortTable(7)" style="cursor: pointer; min-width: 100px;">Delta €</th>
+                                        <th style="min-width: 100px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="validationTableBody">
+                                    <!-- Validation rows will be dynamically added here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tab 2: Pending Invoices -->
+                <div id="pendingTab" class="tab-content active">
+                    <div class="card">
+                        
+                        <!-- Info Bar -->
+                        <div id="pendingInfoBar" class="info-bar" style="display: none; margin-bottom: 1rem; padding: 1rem; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #0ea5e9;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <span style="font-size: 1.2rem;">ℹ️</span>
+                                <div id="pendingInfoText">Loading pending invoices...</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Project Filter Bar (hidden by default) -->
+                        <div id="projectFilterBar" class="info-bar" style="display: none; margin-bottom: 1rem; padding: 1rem; background: #fff7ed; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <span style="font-size: 1.2rem;">🎯</span>
+                                    <div>
+                                        <strong>Filtered by project:</strong> 
+                                        <span id="filteredProjectName" style="font-family: monospace; color: #92400e;"></span>
+                                    </div>
+                                </div>
+                                <button class="btn" onclick="clearPendingProjectFilter()">🗑️ Clear Filter</button>
+                            </div>
+                        </div>
+                        
+                        
+                        <!-- Pending Invoices Table -->
+                        <div style="overflow-x: auto;">
+                            <table class="data-table" id="pendingInvoicesTable" style="min-width: 1000px;">
+                                <thead>
+                                    <tr>
+                                        <th><input type="checkbox" id="selectAllPending" onchange="toggleSelectAllPending()"></th>
+                                        <th onclick="sortPendingTable(1)" style="cursor: pointer;">Invoice #</th>
+                                        <th onclick="sortPendingTable(2)" style="cursor: pointer;">Project</th>
+                                        <th onclick="sortPendingTable(3)" style="cursor: pointer;">Date</th>
+                                        <th onclick="sortPendingTable(4)" style="cursor: pointer;">Amount</th>
+                                        <th onclick="sortPendingTable(5)" style="cursor: pointer;">Internal Cost</th>
+                                        <th onclick="sortPendingTable(6)" style="cursor: pointer;">External Cost</th>
+                                        <th onclick="sortPendingTable(7)" style="cursor: pointer;">Total Cost</th>
+                                        <th onclick="sortPendingTable(8)" style="cursor: pointer;">Source</th>
+                                        <th style="min-width: 200px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pendingInvoicesTableBody">
+                                    <!-- Pending invoice rows will be dynamically added here -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Bulk Actions -->
+                        <div class="bulk-actions" style="margin-top: 1rem; padding: 1rem; background: #f8fafc; border-radius: 8px; display: none;" id="bulkActions">
+                            <div style="display: flex; gap: 1rem; align-items: center;">
+                                <span style="font-weight: 500;">Selected: <span id="selectedCount">0</span> invoices</span>
+                                <button class="btn btn-success" onclick="bulkApproveInvoices()">✅ Approve Selected</button>
+                                <button class="btn btn-warning" onclick="bulkRejectInvoices()">❌ Reject Selected</button>
+                                <button class="btn" onclick="showSelectedDetails()">🔍 Show Details</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tab 3: Service Period Details -->
+                <div id="detailsTab" class="tab-content">
+                    <div class="card">
+                        <p id="detailsPlaceholder">Detailed invoice and cost data will be shown here once an invoice is selected for detailed review in the 'Pending Invoices' tab.</p>
+                        <div id="detailsContent">
+                            <!-- Service period details will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== GLOBAL DATA STORAGE =====
+        let validationData = {
+            ppmData: [],        // Changed to array for consolidation
+            extSapData: [],     // Changed to array for consolidation
+            i2eData: [],        // Changed to array for consolidation
+            processedResults: null,
+            currentWBS: null,
+            currentMonth: null,
+            cachedInvoices: null,
+            selectedInvoices: [],
+            sourceFiles: {      // Track source files for debugging
+                ppm: [],
+                extSap: [],
+                i2e: []
+            },
+            consolidationStats: {  // Track consolidation statistics
+                totalFiles: 0,
+                ppmTabs: 0,
+                extSapTabs: 0,
+                i2eTabs: 0,
+                duplicatesRemoved: {
+                    ppm: 0,
+                    extSap: 0,
+                    i2e: 0
+                }
+            }
+        };
+
+        // ===== INITIALIZATION =====
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeValidator();
+            
+            // Ensure pending invoices filter is applied after initialization
+            setTimeout(() => {
+                if (document.getElementById('validationResults').style.display !== 'none') {
+                    console.log('🔍 Applying initial pending invoices filter...');
+                    filterProjects();
+                }
+            }, 500);
+        });
+
+        function initializeValidator() {
+            console.log('🔍 Initializing I2E Invoice Validator...');
+            
+            // Inject spy icon into header
+            injectSpyIcon();
+            
+            // Load cached invoices immediately
+            loadCachedInvoices();
+            
+            // Set up file upload handlers
+            setupAdditionalFileUpload();
+            
+            // Show cost data tab by default (new landing page)
+            switchTab('costdata');
+            
+            // Update tab button states based on available data
+            updateTabButtonStates();
+            
+            console.log('✅ I2E Invoice Validator initialized');
+        }
+
+        // ===== CACHE MANAGEMENT =====
+        function loadCachedInvoices() {
+            try {
+                console.log('📋 Loading cached invoices...');
+                
+                const pendingInvoices = getPendingInvoices();
+                const cacheStats = getCacheStats();
+                
+                validationData.cachedInvoices = pendingInvoices;
+                
+                console.log(`📊 Cache loaded: ${cacheStats.counts.pending} pending, ${cacheStats.counts.approved} approved, ${cacheStats.counts.rejected} rejected`);
+                
+                // Update pending invoices display
+                displayPendingInvoices(pendingInvoices);
+                
+                // Update info bar
+                updatePendingInfoBar(cacheStats);
+                
+                // Update cache info on landing tab
+                updateCacheInfoPanel(cacheStats);
+                
+                // Apply project filter if active on pending tab
+                if (currentProjectFilter) {
+                    setTimeout(() => {
+                        applyProjectFilterToPendingInvoices();
+                    }, 100);
+                }
+                
+            } catch (error) {
+                console.error('Error loading cached invoices:', error);
+                displayPendingInvoices([]);
+            }
+        }
+
+        function displayPendingInvoices(pendingInvoices) {
+            const tableBody = document.getElementById('pendingInvoicesTableBody');
+            
+            if (!pendingInvoices || pendingInvoices.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="11" style="text-align: center; padding: 2rem; color: #6b7280;">
+                            <div style="font-size: 1.2rem; margin-bottom: 0.5rem;">📭</div>
+                            <div>No pending invoices found</div>
+                            <div style="font-size: 0.9rem; margin-top: 0.5rem;">
+                                Process some invoices in the I2E Invoice Processor first
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            console.log(`📋 Displaying ${pendingInvoices.length} pending invoices`);
+            
+            tableBody.innerHTML = pendingInvoices.map((invoice, index) => {
+                const invoiceNumber = getInvoiceNumber(invoice);
+                const projectId = getProjectId(invoice);
+                const invoiceTotal = getInvoiceTotal(invoice);
+                const invoiceDate = getInvoiceDate(invoice);
+                const monthOfInvoice = getMonthOfInvoice(invoice);
+                const sourceText = invoice.source === 'new' ? 'New' : 'Cache';
+                
+                // Calculate costs for this invoice based on month filtering
+                const costs = calculateInvoiceCosts(invoice, monthOfInvoice);
+                
+                return `
+                    <tr data-invoice="${invoiceNumber}">
+                        <td>
+                            <input type="checkbox" class="invoice-checkbox" value="${invoiceNumber}" onchange="updateSelectedInvoices()">
+                        </td>
+                        <td><strong>${invoiceNumber}</strong></td>
+                        <td>${projectId}</td>
+                        <td>${invoiceDate}</td>
+                        <td>${formatCurrency(invoiceTotal)}</td>
+                        <td>${formatCurrency(costs.internalCost)}</td>
+                        <td>${formatCurrency(costs.externalCost)}</td>
+                        <td><strong>${formatCurrency(costs.totalCost)}</strong></td>
+                        <td>${sourceText}</td>
+                        <td>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button class="btn btn-success" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="handleApproveInvoice('${invoiceNumber}')">✅ Approve</button>
+                                <button class="btn btn-warning" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="handleRejectInvoice('${invoiceNumber}')">❌ Reject</button>
+                                <button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="showInvoiceDetails('${invoiceNumber}')">🔍 Details</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function updatePendingInfoBar(cacheStats) {
+            const infoBar = document.getElementById('pendingInfoBar');
+            const infoText = document.getElementById('pendingInfoText');
+            
+            if (cacheStats.counts.total === 0) {
+                infoBar.style.display = 'none';
+                return;
+            }
+            
+            infoBar.style.display = 'block';
+            
+            const parts = [];
+            if (cacheStats.counts.pending > 0) parts.push(`${cacheStats.counts.pending} pending`);
+            if (cacheStats.counts.approved > 0) parts.push(`${cacheStats.counts.approved} approved`);
+            if (cacheStats.counts.rejected > 0) parts.push(`${cacheStats.counts.rejected} rejected`);
+            
+            infoText.innerHTML = `
+                You have ${parts.join(', ')} invoices in cache. 
+                ${cacheStats.counts.pending > 0 ? '<strong>Only pending invoices remain in cache after approval/rejection.</strong>' : ''}
+            `;
+        }
+
+        // ===== TAB NAVIGATION =====
+        function switchTab(tabName) {
+            // Check if cost data is required and not available
+            if ((tabName === 'pending' || tabName === 'overview') && !isCostDataAvailable()) {
+                alert('⚠️ Cost data required!\n\nPlease upload PPM and EXT SAP data in the "Add Cost Data" tab before accessing pending invoices or project overview.');
+                // Force switch back to costdata tab
+                tabName = 'costdata';
+            }
+            
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active from all buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName + 'Tab').classList.add('active');
+            
+            // Find and activate the correct button
+            const targetButton = Array.from(document.querySelectorAll('.tab-button')).find(btn => 
+                btn.onclick.toString().includes(`switchTab('${tabName}')`)
+            );
+            if (targetButton) {
+                targetButton.classList.add('active');
+            }
+            
+            // Update tab button states
+            updateTabButtonStates();
+            
+            // Apply filters when switching to overview tab
+            if (tabName === 'overview') {
+                // Small delay to ensure DOM is updated
+                setTimeout(() => {
+                    if (document.getElementById('validationResults').style.display !== 'none') {
+                        filterProjects();
+                    }
+                }, 50);
+            }
+        }
+        
+        // Check if cost data is available
+        function isCostDataAvailable() {
+            return validationData && 
+                   Array.isArray(validationData.ppmData) && validationData.ppmData.length > 0 &&
+                   Array.isArray(validationData.extSapData) && validationData.extSapData.length > 0;
+        }
+        
+        // Update tab button visual states based on data availability
+        function updateTabButtonStates() {
+            const hasCostData = isCostDataAvailable();
+            const pendingBtn = document.querySelector('button[onclick*="pending"]');
+            const overviewBtn = document.querySelector('button[onclick*="overview"]');
+            
+            if (pendingBtn) {
+                if (hasCostData) {
+                    pendingBtn.style.opacity = '1';
+                    pendingBtn.style.cursor = 'pointer';
+                    pendingBtn.disabled = false;
+                } else {
+                    pendingBtn.style.opacity = '0.5';
+                    pendingBtn.style.cursor = 'not-allowed';
+                    pendingBtn.disabled = true;
+                }
+            }
+            
+            if (overviewBtn) {
+                if (hasCostData) {
+                    overviewBtn.style.opacity = '1';
+                    overviewBtn.style.cursor = 'pointer';
+                    overviewBtn.disabled = false;
+                } else {
+                    overviewBtn.style.opacity = '0.5';
+                    overviewBtn.style.cursor = 'not-allowed';
+                    overviewBtn.disabled = true;
+                }
+            }
+        }
+
+        // ===== DATA CONSOLIDATION AND DEDUPLICATION =====
+        
+        /**
+         * Extract year from PPM "Week starts on" column
+         * @param {string} weekStartsOn - Date string from "Week starts on" column
+         * @returns {number} Year or null if cannot parse
+         */
+        function extractYearFromWeekStartsOn(weekStartsOn) {
+            if (!weekStartsOn) return null;
+            
+            try {
+                // Handle various date formats
+                const date = new Date(weekStartsOn);
+                if (isNaN(date.getTime())) {
+                    console.warn(`Could not parse week starts on date: ${weekStartsOn}`);
+                    return null;
+                }
+                return date.getFullYear();
+            } catch (error) {
+                console.warn(`Error parsing week starts on date: ${weekStartsOn}`, error);
+                return null;
+            }
+        }
+        
+        /**
+         * Deduplicate PPM data based on unique identifiers
+         * @param {Array} ppmArray - Array of PPM records
+         * @returns {Object} {deduplicated: Array, duplicatesRemoved: number}
+         */
+        function deduplicatePPMData(ppmArray) {
+            const uniqueKeys = new Set();
+            const deduplicated = [];
+            let duplicatesRemoved = 0;
+            
+            ppmArray.forEach(row => {
+                // Create unique key: WBS + User + Month + Year + Week
+                const wbs = row['WBS Element'] || row['WBS Element ID'] || row['WBS'] || '';
+                const user = row['User'] || row['Employee'] || '';
+                const month = row['Month of invoice'] || '';
+                const year = extractYearFromWeekStartsOn(row['Week starts on']) || '';
+                const week = row['Week starts on'] || '';
+                
+                const uniqueKey = `${wbs}|${user}|${month}|${year}|${week}`;
+                
+                if (!uniqueKeys.has(uniqueKey)) {
+                    uniqueKeys.add(uniqueKey);
+                    // Add year to the record for filtering
+                    row._extractedYear = year;
+                    deduplicated.push(row);
+                } else {
+                    duplicatesRemoved++;
+                    console.log(`Duplicate PPM record removed: ${uniqueKey}`);
+                }
+            });
+            
+            return { deduplicated, duplicatesRemoved };
+        }
+        
+        /**
+         * Deduplicate EXT SAP data based on unique identifiers
+         * @param {Array} extSapArray - Array of EXT SAP records
+         * @returns {Object} {deduplicated: Array, duplicatesRemoved: number}
+         */
+        function deduplicateExtSapData(extSapArray) {
+            const uniqueKeys = new Set();
+            const deduplicated = [];
+            let duplicatesRemoved = 0;
+            
+            extSapArray.forEach(row => {
+                // Create unique key: WBS + Document + Period + FiscalYear + Value
+                const wbs = row['WBS Element'] || row['WBS'] || '';
+                const document = row['Document'] || row['Doc'] || '';
+                const period = row['Period'] || '';
+                const fiscalYear = row['Fiscal Year'] || row['FiscalYear'] || '';
+                const value = row['Value'] || row['Amount'] || '';
+                
+                const uniqueKey = `${wbs}|${document}|${period}|${fiscalYear}|${value}`;
+                
+                if (!uniqueKeys.has(uniqueKey)) {
+                    uniqueKeys.add(uniqueKey);
+                    deduplicated.push(row);
+                } else {
+                    duplicatesRemoved++;
+                    console.log(`Duplicate EXT SAP record removed: ${uniqueKey}`);
+                }
+            });
+            
+            return { deduplicated, duplicatesRemoved };
+        }
+        
+        /**
+         * Deduplicate I2E invoice data based on unique identifiers
+         * @param {Array} i2eArray - Array of I2E invoice records
+         * @returns {Object} {deduplicated: Array, duplicatesRemoved: number}
+         */
+        function deduplicateI2EData(i2eArray) {
+            const uniqueKeys = new Set();
+            const deduplicated = [];
+            let duplicatesRemoved = 0;
+            
+            i2eArray.forEach(row => {
+                // Create unique key: Invoice + Position + Project + Amount
+                const invoice = row['invoiceNumber'] || row['Invoice Number'] || '';
+                const position = row['position'] || row['Position'] || '';
+                const project = row['projectId'] || row['Project ID'] || '';
+                const amount = row['positionTotal'] || row['Amount'] || '';
+                
+                const uniqueKey = `${invoice}|${position}|${project}|${amount}`;
+                
+                if (!uniqueKeys.has(uniqueKey)) {
+                    uniqueKeys.add(uniqueKey);
+                    deduplicated.push(row);
+                } else {
+                    duplicatesRemoved++;
+                    console.log(`Duplicate I2E record removed: ${uniqueKey}`);
+                }
+            });
+            
+            return { deduplicated, duplicatesRemoved };
+        }
+        
+        /**
+         * Consolidate and deduplicate all loaded data
+         */
+        function consolidateAndDeduplicateData() {
+            console.log('🔄 Starting data consolidation and deduplication...');
+            
+            // Deduplicate PPM data
+            if (validationData.ppmData.length > 0) {
+                const ppmResult = deduplicatePPMData(validationData.ppmData);
+                validationData.ppmData = ppmResult.deduplicated;
+                validationData.consolidationStats.duplicatesRemoved.ppm = ppmResult.duplicatesRemoved;
+                console.log(`✅ PPM: ${ppmResult.deduplicated.length} unique records, ${ppmResult.duplicatesRemoved} duplicates removed`);
+            }
+            
+            // Deduplicate EXT SAP data
+            if (validationData.extSapData.length > 0) {
+                const extSapResult = deduplicateExtSapData(validationData.extSapData);
+                validationData.extSapData = extSapResult.deduplicated;
+                validationData.consolidationStats.duplicatesRemoved.extSap = extSapResult.duplicatesRemoved;
+                console.log(`✅ EXT SAP: ${extSapResult.deduplicated.length} unique records, ${extSapResult.duplicatesRemoved} duplicates removed`);
+            }
+            
+            // Deduplicate I2E data
+            if (validationData.i2eData.length > 0) {
+                const i2eResult = deduplicateI2EData(validationData.i2eData);
+                validationData.i2eData = i2eResult.deduplicated;
+                validationData.consolidationStats.duplicatesRemoved.i2e = i2eResult.duplicatesRemoved;
+                console.log(`✅ I2E: ${i2eResult.deduplicated.length} unique records, ${i2eResult.duplicatesRemoved} duplicates removed`);
+            }
+            
+            console.log('🎯 Data consolidation completed:', validationData.consolidationStats);
+        }
+
+        // ===== MULTIPLE INVOICE DETECTION =====
+        
+        /**
+         * Check for multiple pending invoices for same project and month
+         * @param {string} currentInvoiceNumber - Current invoice number
+         * @param {string} projectId - Project ID
+         * @param {string} monthOfInvoice - Month of invoice
+         * @returns {Array} Array of other invoice numbers for same project/month
+         */
+        function checkForMultipleInvoicesInMonth(currentInvoiceNumber, projectId, monthOfInvoice) {
+            const pendingInvoices = getPendingInvoices();
+            const sameProjectMonth = [];
+            
+            pendingInvoices.forEach(invoice => {
+                if (invoice.invoiceNumber === currentInvoiceNumber) return; // Skip current invoice
+                
+                const invProjectId = getProjectId(invoice);
+                const invMonth = getMonthOfInvoice(invoice);
+                
+                if (invProjectId === projectId && invMonth === monthOfInvoice) {
+                    sameProjectMonth.push(invoice.invoiceNumber);
+                }
+            });
+            
+            return sameProjectMonth;
+        }
+        
+        /**
+         * Show notification for multiple invoices in same project/month
+         * @param {string} invoiceNumber - Current invoice
+         * @param {Array} otherInvoices - Other invoice numbers
+         * @param {string} projectId - Project ID
+         * @param {string} monthOfInvoice - Month
+         */
+        function showMultipleInvoiceNotification(invoiceNumber, otherInvoices, projectId, monthOfInvoice) {
+            if (otherInvoices.length === 0) return;
+            
+            const message = `⚠️ Multiple pending invoices detected!\n\nProject: ${projectId}\nMonth: ${monthOfInvoice}\n\nOther pending invoices:\n${otherInvoices.join(', ')}\n\nTotal cost shown may exceed individual invoice amounts.`;
+            
+            // Show as notification instead of alert to be less intrusive
+            showNotification(message, 'warning', 8000); // Show for 8 seconds
+        }
+
+        // ===== APPROVAL WORKFLOW =====
+        function handleApproveInvoice(invoiceNumber) {
+            const comments = prompt(`Approve invoice ${invoiceNumber}?\n\nOptional comments:`);
+            
+            if (comments !== null) { // User didn't cancel
+                try {
+                    const userId = getUserId();
+                    console.log(`🔄 Attempting to approve invoice ${invoiceNumber} by ${userId} with comments: "${comments}"`);
+                    
+                    if (typeof window.approveInvoice !== 'function') {
+                        throw new Error('approveInvoice function not available - cache module may not be loaded');
+                    }
+                    
+                    const result = window.approveInvoice(invoiceNumber, userId, comments);
+                    console.log(`🔄 Approval result: ${result}`);
+                    
+                    if (result === true) {
+                        console.log(`✅ Invoice approved: ${invoiceNumber}`);
+                        
+                        // Refresh display
+                        loadCachedInvoices();
+                        
+                        // Show success message
+                        showNotification(`Invoice ${invoiceNumber} approved successfully`, 'success');
+                    } else {
+                        throw new Error(`Approval function returned: ${result} (expected true). Check cache module and invoice data.`);
+                    }
+                } catch (error) {
+                    console.error('Error approving invoice:', error);
+                    alert(`Error approving invoice: ${error.message}\n\nPlease check the console for details and try again.`);
+                }
+            }
+        }
+
+        function handleRejectInvoice(invoiceNumber) {
+            const comments = prompt(`Reject invoice ${invoiceNumber}?\n\nReason for rejection (required):`);
+            
+            if (comments !== null && comments.trim() !== '') {
+                try {
+                    const userId = getUserId();
+                    console.log(`🔄 Attempting to reject invoice ${invoiceNumber} by ${userId} with reason: "${comments}"`);
+                    
+                    if (typeof window.rejectInvoice !== 'function') {
+                        throw new Error('rejectInvoice function not available - cache module may not be loaded');
+                    }
+                    
+                    const result = window.rejectInvoice(invoiceNumber, userId, comments);
+                    console.log(`🔄 Rejection result: ${result}`);
+                    
+                    if (result === true) {
+                        console.log(`❌ Invoice rejected: ${invoiceNumber}`);
+                        
+                        // Refresh display
+                        loadCachedInvoices();
+                        
+                        // Show success message
+                        showNotification(`Invoice ${invoiceNumber} rejected`, 'warning');
+                    } else {
+                        throw new Error(`Rejection function returned: ${result} (expected true). Check cache module and invoice data.`);
+                    }
+                } catch (error) {
+                    console.error('Error rejecting invoice:', error);
+                    alert(`Error rejecting invoice: ${error.message}\n\nPlease check the console for details and try again.`);
+                }
+            } else if (comments !== null) {
+                alert('Rejection reason is required.');
+            }
+        }
+
+        function showInvoiceDetails(invoiceNumber) {
+            // Store selected invoice for details tab
+            validationData.selectedInvoiceNumber = invoiceNumber;
+            
+            // Enable and switch to details tab
+            const detailsTabBtn = document.getElementById('detailsTabBtn');
+            detailsTabBtn.style.display = 'inline-block';
+            
+            switchTab('details');
+            
+            // Load invoice details
+            loadInvoiceDetails(invoiceNumber);
+        }
+
+        // ===== BULK OPERATIONS =====
+        function updateSelectedInvoices() {
+            const checkboxes = document.querySelectorAll('.invoice-checkbox:checked');
+            const selectedCount = checkboxes.length;
+            const bulkActions = document.getElementById('bulkActions');
+            const selectedCountSpan = document.getElementById('selectedCount');
+            
+            validationData.selectedInvoices = Array.from(checkboxes).map(cb => cb.value);
+            selectedCountSpan.textContent = selectedCount;
+            
+            if (selectedCount > 0) {
+                bulkActions.style.display = 'block';
+            } else {
+                bulkActions.style.display = 'none';
+            }
+        }
+
+        function toggleSelectAllPending() {
+            const selectAllCheckbox = document.getElementById('selectAllPending');
+            const invoiceCheckboxes = document.querySelectorAll('.invoice-checkbox');
+            
+            invoiceCheckboxes.forEach(checkbox => {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+            
+            updateSelectedInvoices();
+        }
+
+        function bulkApproveInvoices() {
+            if (validationData.selectedInvoices.length === 0) {
+                alert('No invoices selected.');
+                return;
+            }
+            
+            const comments = prompt(`Approve ${validationData.selectedInvoices.length} selected invoices?\n\nOptional comments:`);
+            
+            if (comments !== null) {
+                const userId = getUserId();
+                let successCount = 0;
+                
+                validationData.selectedInvoices.forEach(invoiceNumber => {
+                    if (window.approveInvoice(invoiceNumber, userId, comments)) {
+                        successCount++;
+                    }
+                });
+                
+                console.log(`✅ Bulk approved: ${successCount}/${validationData.selectedInvoices.length} invoices`);
+                
+                // Refresh display
+                loadCachedInvoices();
+                
+                // Clear selections
+                validationData.selectedInvoices = [];
+                
+                showNotification(`${successCount} invoices approved successfully`, 'success');
+            }
+        }
+
+        function bulkRejectInvoices() {
+            if (validationData.selectedInvoices.length === 0) {
+                alert('No invoices selected.');
+                return;
+            }
+            
+            const comments = prompt(`Reject ${validationData.selectedInvoices.length} selected invoices?\n\nReason for rejection (required):`);
+            
+            if (comments !== null && comments.trim() !== '') {
+                const userId = getUserId();
+                let successCount = 0;
+                
+                validationData.selectedInvoices.forEach(invoiceNumber => {
+                    if (window.rejectInvoice(invoiceNumber, userId, comments)) {
+                        successCount++;
+                    }
+                });
+                
+                console.log(`❌ Bulk rejected: ${successCount}/${validationData.selectedInvoices.length} invoices`);
+                
+                // Refresh display
+                loadCachedInvoices();
+                
+                // Clear selections
+                validationData.selectedInvoices = [];
+                
+                showNotification(`${successCount} invoices rejected`, 'warning');
+            } else if (comments !== null) {
+                alert('Rejection reason is required.');
+            }
+        }
+
+        // Navigate to pending invoices tab for validation
+        function goToPendingInvoices() {
+            // Switch to pending invoices tab
+            switchTab('pending');
+            
+            // If there are pending invoices, run project validation automatically to populate Project Overview
+            const cacheStats = getCacheStats();
+            if (cacheStats.counts.pending > 0) {
+                // Run validation to populate Project Overview tab
+                processValidation();
+            }
+        }
+
+        // Update cache info panel on landing tab
+        function updateCacheInfoPanel(cacheStats) {
+            const cacheInfoText = document.getElementById('cacheInfoText');
+            if (cacheInfoText && cacheStats) {
+                const totalInvoices = cacheStats.counts.total;
+                const pendingCount = cacheStats.counts.pending;
+                const approvedCount = cacheStats.counts.approved;
+                const rejectedCount = cacheStats.counts.rejected;
+                
+                if (totalInvoices > 0) {
+                    cacheInfoText.innerHTML = `
+                        <strong>${totalInvoices} invoices in cache:</strong> 
+                        ${pendingCount} pending, ${approvedCount} approved, ${rejectedCount} rejected
+                        <br><small>Cache size: ${cacheStats.sizes.totalMB} MB (${cacheStats.limits.percentUsed}% of limit)</small>
+                    `;
+                } else {
+                    cacheInfoText.innerHTML = 'No cached invoices found. Process invoices first using the I2E Invoice Processor.';
+                }
+            }
+        }
+
+        // ===== HELPER FUNCTIONS =====
+        function getInvoiceDate(invoice) {
+            if (invoice.summary && invoice.summary.invoiceDate) {
+                return invoice.summary.invoiceDate;
+            }
+            if (invoice.fullInvoiceData && invoice.fullInvoiceData[0]) {
+                return invoice.fullInvoiceData[0].dateOfInvoice;
+            }
+            return '';
+        }
+
+        function getUserId() {
+            // Try to get user ID from preferences or browser
+            try {
+                const preferences = JSON.parse(localStorage.getItem('i2e_user_preferences') || '{}');
+                if (preferences.windowsUserId) {
+                    return preferences.windowsUserId;
+                }
+                
+                // Fallback to browser info
+                return navigator.userAgent.includes('Windows') ? 'windows-user' : 'unknown-user';
+            } catch (error) {
+                return 'unknown-user';
+            }
+        }
+
+        function showNotification(message, type = 'info') {
+            // Simple notification implementation
+            console.log(`📢 ${type.toUpperCase()}: ${message}`);
+            
+            // You could enhance this with a proper notification system
+            // For now, just log to console
+        }
+
+        function setupAdditionalFileUpload() {
+            const uploadZone = document.getElementById('additionalUploadZone');
+            const fileInput = document.getElementById('additionalExcelFile');
+            
+            if (!uploadZone || !fileInput) return;
+            
+            // Click to browse
+            uploadZone.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            // File input change
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleAdditionalExcelUpload(e);
+                }
+            });
+            
+            // Drag and drop
+            uploadZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadZone.classList.add('dragover');
+            });
+            
+            uploadZone.addEventListener('dragleave', () => {
+                uploadZone.classList.remove('dragover');
+            });
+            
+            uploadZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadZone.classList.remove('dragover');
+                handleAdditionalExcelUpload(e);
+            });
+        }
+
+        async function handleAdditionalExcelUpload(event) {
+            const files = event.target ? event.target.files : event.dataTransfer.files;
+            if (!files || files.length === 0) return;
+            
+            console.log('📁 Processing additional Excel files for deduplication...');
+            
+            // Process uploaded files and merge with cache
+            // This would integrate with the existing Excel processing logic
+            // For now, just log the intent
+            console.log(`📊 Would process ${files.length} additional Excel files`);
+            
+            showNotification(`${files.length} files uploaded - integration with cache in progress...`, 'info');
+        }
+
+        // ===== FILE UPLOAD HANDLERS =====
+        async function handleExcelUpload(event) {
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
+            
+            // Process each file individually (works for single or multiple files)
+            if (files.length > 1) {
+                showNotification(`Processing ${files.length} files...`, 'info');
+            }
+            
+            for (const file of files) {
+                await processSingleFile(file);
+            }
+        }
+
+        async function processSingleFile(file) {
+            
+            try {
+                showNotification('Processing Excel file...', 'info');
+                console.log('📁 Processing file:', file.name);
+                
+                // Parse the Excel file and detect all available tabs
+                const workbook = new ExcelJS.Workbook();
+                await workbook.xlsx.load(await file.arrayBuffer());
+                
+                console.log('📊 Available worksheets:', workbook.worksheets.map(ws => ws.name));
+                
+                // Try to find and parse each expected tab
+                const results = {
+                    ppm: null,
+                    extSap: null,
+                    i2e: null
+                };
+                
+                // Look for PPM tab
+                const ppmSheet = workbook.worksheets.find(ws => 
+                    ws.name.toLowerCase().includes('ppm') && 
+                    ws.name.toLowerCase().includes('all details')
+                );
+                // Get file timestamps
+                const uploadTime = new Date().toLocaleString();
+                const fileModified = new Date(file.lastModified).toLocaleString();
+                
+                if (ppmSheet) {
+                    console.log('✅ Found PPM tab:', ppmSheet.name);
+                    results.ppm = parseWorksheetToArray(ppmSheet);
+                    
+                    // Add source file metadata to each record (like multiple file processing)
+                    results.ppm.forEach(row => {
+                        row._sourceFile = file.name;
+                        row._sourceTab = ppmSheet.name;
+                    });
+                    
+                    // APPEND to existing data instead of replacing it
+                    validationData.ppmData.push(...results.ppm);
+                    
+                    // Debug: Check what we got from parsing
+                    console.log('🔍 PPM parsing result:', results.ppm);
+                    console.log('🔍 PPM is array?', Array.isArray(results.ppm));
+                    console.log('🔍 PPM length:', results.ppm ? results.ppm.length : 'undefined');
+                    
+                    // Add file metadata to sourceFiles
+                    const rowCount = (results.ppm && Array.isArray(results.ppm)) ? results.ppm.length : 0;
+                    console.log('📊 Final PPM row count:', rowCount);
+                    
+                    validationData.sourceFiles.ppm.push({
+                        fileName: file.name,
+                        uploadTime: uploadTime,
+                        fileModified: fileModified,
+                        rowCount: rowCount,
+                        tabName: ppmSheet.name
+                    });
+                    
+                    console.log('🔍 Added to sourceFiles.ppm:', validationData.sourceFiles.ppm[validationData.sourceFiles.ppm.length - 1]);
+                    updateFileInfo('ppm');
+                }
+                
+                // Look for EXT SAP tab - try multiple variations
+                let extSapSheet = workbook.worksheets.find(ws => 
+                    ws.name.toLowerCase().includes('ext sap') && 
+                    ws.name.toLowerCase().includes('costs') && 
+                    ws.name.toLowerCase().includes('oe')
+                );
+                
+                if (!extSapSheet) {
+                    // Try alternative patterns
+                    extSapSheet = workbook.worksheets.find(ws => 
+                        ws.name.toLowerCase().includes('ext sap') && 
+                        ws.name.toLowerCase().includes('oe')
+                    );
+                }
+                
+                if (!extSapSheet) {
+                    extSapSheet = workbook.worksheets.find(ws => 
+                        ws.name.toLowerCase().includes('ext') && ws.name.toLowerCase().includes('sap')
+                    );
+                }
+                
+                if (!extSapSheet) {
+                    extSapSheet = workbook.worksheets.find(ws => 
+                        ws.name.toLowerCase().includes('external')
+                    );
+                }
+                
+                if (extSapSheet) {
+                    console.log('✅ Found EXT SAP tab:', extSapSheet.name);
+                    results.extSap = parseWorksheetToArray(extSapSheet);
+                    
+                    // Add source file metadata to each record (like multiple file processing)
+                    results.extSap.forEach(row => {
+                        row._sourceFile = file.name;
+                        row._sourceTab = extSapSheet.name;
+                    });
+                    
+                    // APPEND to existing data instead of replacing it
+                    validationData.extSapData.push(...results.extSap);
+                    
+                    // Add file metadata to sourceFiles
+                    const rowCount = results.extSap ? results.extSap.length : 0;
+                    console.log('📊 EXT SAP data row count:', rowCount);
+                    
+                    validationData.sourceFiles.extSap.push({
+                        fileName: file.name,
+                        uploadTime: uploadTime,
+                        fileModified: fileModified,
+                        rowCount: rowCount,
+                        tabName: extSapSheet.name
+                    });
+                    
+                    updateFileInfo('extSap');
+                    console.log('📊 EXT SAP data sample:', results.extSap.slice(0, 3));
+                } else {
+                    // Look for suggestions
+                    const suggestedTabs = workbook.worksheets.filter(ws => 
+                        ws.name.toLowerCase().includes('ext') || 
+                        ws.name.toLowerCase().includes('sap') ||
+                        ws.name.toLowerCase().includes('external')
+                    );
+                    
+                    if (suggestedTabs.length > 0) {
+                        const suggestions = suggestedTabs.map(ws => ws.name).join(', ');
+                        const userChoice = confirm(`EXT SAP tab not found. Found similar tabs: ${suggestions}. Would you like to use "${suggestedTabs[0].name}" as the EXT SAP tab?`);
+                        
+                        if (userChoice) {
+                            extSapSheet = suggestedTabs[0];
+                            console.log('✅ User approved EXT SAP tab:', extSapSheet.name);
+                            results.extSap = parseWorksheetToArray(extSapSheet);
+                            
+                            // Add source file metadata to each record (like multiple file processing)
+                            results.extSap.forEach(row => {
+                                row._sourceFile = file.name;
+                                row._sourceTab = extSapSheet.name;
+                            });
+                            
+                            // APPEND to existing data instead of replacing it
+                            validationData.extSapData.push(...results.extSap);
+                            
+                            // Add file metadata to sourceFiles
+                            const rowCount = results.extSap ? results.extSap.length : 0;
+                            console.log('📊 EXT SAP data row count:', rowCount);
+                            
+                            validationData.sourceFiles.extSap.push({
+                                fileName: file.name,
+                                uploadTime: uploadTime,
+                                fileModified: fileModified,
+                                rowCount: rowCount,
+                                tabName: extSapSheet.name
+                            });
+                            
+                            updateFileInfo('extSap');
+                            console.log('📊 EXT SAP data sample:', results.extSap.slice(0, 3));
+                        }
+                    } else {
+                        console.log('❌ No EXT SAP tab found. Available tabs:', workbook.worksheets.map(ws => ws.name));
+                    }
+                }
+                
+                // Look for I2E tab - try multiple variations
+                let i2eSheet = workbook.worksheets.find(ws => 
+                    ws.name.toLowerCase().includes('i2e') || 
+                    ws.name.toLowerCase().includes('invoice')
+                );
+                
+                if (!i2eSheet) {
+                    // Try alternative patterns
+                    i2eSheet = workbook.worksheets.find(ws => 
+                        ws.name.toLowerCase().includes('extract')
+                    );
+                }
+                
+                if (i2eSheet) {
+                    console.log('✅ Found I2E tab:', i2eSheet.name);
+                    results.i2e = parseWorksheetToArray(i2eSheet);
+                    
+                    // Add source file metadata to each record (like multiple file processing)
+                    results.i2e.forEach(row => {
+                        row._sourceFile = file.name;
+                        row._sourceTab = i2eSheet.name;
+                    });
+                    
+                    // APPEND to existing data instead of replacing it
+                    validationData.i2eData.push(...results.i2e);
+                    
+                    // Add file metadata to sourceFiles
+                    const rowCount = results.i2e ? results.i2e.length : 0;
+                    console.log('📊 I2E data row count:', rowCount);
+                    
+                    validationData.sourceFiles.i2e.push({
+                        fileName: file.name,
+                        uploadTime: uploadTime,
+                        fileModified: fileModified,
+                        rowCount: rowCount,
+                        tabName: i2eSheet.name
+                    });
+                    
+                    updateFileInfo('i2e');
+                    console.log('📊 I2E data sample:', results.i2e.slice(0, 3));
+                } else {
+                    console.log('❌ No I2E tab found. Available tabs:', workbook.worksheets.map(ws => ws.name));
+                }
+                
+                // Show summary of what was found
+                const foundTabs = Object.keys(results).filter(key => results[key] !== null);
+                if (foundTabs.length > 0) {
+                    showNotification(`Successfully loaded ${foundTabs.length} tab(s): ${foundTabs.join(', ')}`, 'success');
+                } else {
+                    showNotification('No recognized tabs found. Please check tab names.', 'warning');
+                }
+                
+                checkReadyToProcess();
+                
+            } catch (error) {
+                console.error('Error processing Excel file:', error);
+                showNotification('Error processing Excel file: ' + error.message, 'error');
+            }
+        }
+
+        function parseWorksheetToArray(worksheet) {
+            const data = [];
+            const headers = [];
+            
+            // Get headers from first row
+            worksheet.getRow(1).eachCell((cell, colNumber) => {
+                headers[colNumber] = cell.value;
+            });
+            
+            // Process data rows
+            worksheet.eachRow((row, rowNumber) => {
+                if (rowNumber === 1) return; // Skip header row
+                
+                const rowData = {};
+                row.eachCell((cell, colNumber) => {
+                    const header = headers[colNumber];
+                    if (header) {
+                        rowData[header] = cell.value;
+                    }
+                });
+                
+                if (Object.keys(rowData).length > 0) {
+                    data.push(rowData);
+                }
+            });
+            
+            console.log(`📊 Parsed ${data.length} rows from worksheet`, data.slice(0, 3));
+            return data;
+        }
+
+        // ===== MULTIPLE FILE PROCESSING REMOVED =====
+        // Now using single file processing for everything
+
+        // ===== DUPLICATE PROCESSING FUNCTION REMOVED =====
+        // processFileWorksheets() removed - using processSingleFile() for everything
+
+        // ===== FILE INFO DISPLAY =====
+        function updateFileInfo(type) {
+            const fileInfo = document.getElementById(type + 'FileInfo');
+            const statusElement = fileInfo.querySelector('.file-status');
+            const dateElement = fileInfo.querySelector('.file-date');
+            
+            const sourceFiles = validationData.sourceFiles[type];
+            
+            if (sourceFiles.length === 0) {
+                statusElement.textContent = 'No files uploaded';
+                statusElement.className = 'file-status status-empty';
+                dateElement.textContent = '';
+                return;
+            }
+            
+            // Display multiple files with details
+            let statusText = '';
+            let dateText = '';
+            
+            if (sourceFiles.length === 1) {
+                // Single file display
+                const file = sourceFiles[0];
+                statusText = `${file.fileName} (${file.rowCount} rows)`;
+                dateText = `${file.uploadTime} (File: ${file.fileModified})`;
+            } else {
+                // Multiple files display
+                const totalRows = sourceFiles.reduce((sum, file) => sum + file.rowCount, 0);
+                const deduplicatedRows = getCurrentDataLength(type);
+                const duplicatesRemoved = totalRows - deduplicatedRows;
+                
+                statusText = `${sourceFiles.length} files uploaded (${totalRows} total rows → ${deduplicatedRows} after deduplication)`;
+                
+                // Show file list
+                dateText = sourceFiles.map(file => 
+                    `📄 ${file.fileName}: ${file.rowCount} rows (${file.uploadTime})`
+                ).join('\n');
+                
+                if (duplicatesRemoved > 0) {
+                    dateText += `\n🔄 ${duplicatesRemoved} duplicates removed`;
+                }
+            }
+            
+            statusElement.textContent = statusText;
+            statusElement.className = 'file-status status-success';
+            statusElement.title = dateText; // Show details on hover
+            
+            // Format date element for display
+            if (sourceFiles.length === 1) {
+                dateElement.textContent = dateText;
+            } else {
+                dateElement.innerHTML = `<details style="margin-top: 5px;">
+                    <summary style="cursor: pointer; color: #3b82f6;">📋 Show ${sourceFiles.length} file details</summary>
+                    <div style="margin-top: 5px; padding: 5px; background: #f8fafc; border-radius: 4px; font-size: 0.9em; white-space: pre-line;">${dateText}</div>
+                </details>`;
+            }
+        }
+        
+        // Helper function to get current data length after deduplication
+        function getCurrentDataLength(type) {
+            switch(type) {
+                case 'ppm': return validationData.ppmData.length;
+                case 'extSap': return validationData.extSapData.length;
+                case 'i2e': return validationData.i2eData.length;
+                default: return 0;
+            }
+        }
+
+        function checkReadyToProcess() {
+            const hasData = validationData.ppmData || validationData.extSapData || validationData.i2eData;
+            const processBtn = document.getElementById('processBtn');
+            
+            // Enable button if we have uploaded data OR cached invoices
+            const cacheStats = getCacheStats();
+            const hasCachedInvoices = cacheStats.counts.pending > 0 || cacheStats.counts.approved > 0;
+            
+            processBtn.disabled = !(hasData || hasCachedInvoices);
+            
+            // Update button text based on current state
+            if (hasCachedInvoices && !hasData) {
+                processBtn.textContent = '📋 View Pending Invoices';
+            } else {
+                processBtn.textContent = '✅ Validate Invoices';
+            }
+        }
+
+
+        // ===== VALIDATION PROCESSING =====
+        async function processValidation() {
+            try {
+                showNotification('Processing validation...', 'info');
+                
+                // Initialize I2E data if not uploaded (use cache data)
+                if (!validationData.i2eData) {
+                    // Get invoices from cache (pending + approved only for validation)
+                    const cachedInvoices = getInvoicesForValidation();
+                    
+                    if (cachedInvoices && cachedInvoices.length > 0) {
+                        // Convert cache format to validation format
+                        const i2eData = [];
+                        cachedInvoices.forEach(invoice => {
+                            if (invoice.fullInvoiceData && Array.isArray(invoice.fullInvoiceData)) {
+                                i2eData.push(...invoice.fullInvoiceData);
+                            } else if (invoice.summary) {
+                                // For approved invoices, create minimal data from summary
+                                i2eData.push({
+                                    fileName: invoice.summary.fileName || 'cached_invoice.pdf',
+                                    invoiceNumber: invoice.invoiceNumber,
+                                    projectId: invoice.summary.projectId,
+                                    customerId: invoice.summary.customerId || '',
+                                    dateOfInvoice: invoice.summary.invoiceDate,
+                                    monthOfInvoice: invoice.summary.monthOfInvoice,
+                                    currency: invoice.summary.currency || 'EUR',
+                                    extractedInvoiceTotal: invoice.summary.totalAmount,
+                                    creditNote: invoice.summary.creditNote || false,
+                                    approvalStatus: invoice.status
+                                });
+                            }
+                        });
+                        
+                        validationData.i2eData = i2eData; // This is already an array
+                        
+                        // Add cache data as a "file" source
+                        const currentTime = new Date().toLocaleString();
+                        validationData.sourceFiles.i2e.push({
+                            fileName: `${i2eData.length} invoices from cache`,
+                            uploadTime: currentTime,
+                            fileModified: 'From cache',
+                            rowCount: i2eData.length,
+                            tabName: 'Cache Data'
+                        });
+                        
+                        updateFileInfo('i2e');
+                        console.log('✅ Using cached I2E data:', i2eData.length, 'invoices');
+                    } else {
+                        showNotification('No I2E invoice data available. Please process invoices first or upload an Excel file.', 'warning');
+                        return;
+                    }
+                }
+                
+                // Consolidate and deduplicate all loaded data
+                consolidateAndDeduplicateData();
+                
+                // Process the validation logic
+                const results = processValidationLogic();
+                validationData.processedResults = results;
+                
+                // Display results
+                displayValidationResults(results);
+                
+                // Refresh Pending Invoices table now that cost data is loaded
+                const pendingInvoices = getPendingInvoices();
+                displayPendingInvoices(pendingInvoices);
+                console.log('🔄 Refreshed Pending Invoices table with cost data');
+                
+                // Update tab button states now that cost data is available
+                updateTabButtonStates();
+                
+                showNotification('Validation completed successfully', 'success');
+                
+            } catch (error) {
+                console.error('Error during validation:', error);
+                showNotification('Error during validation: ' + error.message, 'error');
+            }
+        }
+
+        function processValidationLogic() {
+            // Aggregate data by WBS code
+            const wbsMap = new Map();
+            
+            console.log('🔍 Starting validation logic...');
+            console.log('📊 Available data sources:', {
+                ppm: validationData.ppmData ? validationData.ppmData.length : 0,
+                extSap: validationData.extSapData ? validationData.extSapData.length : 0,
+                i2e: validationData.i2eData ? validationData.i2eData.length : 0
+            });
+            
+            // Process PPM data (internal costs)
+            if (validationData.ppmData) {
+                console.log('📋 Processing PPM data...');
+                console.log('📋 PPM columns:', Object.keys(validationData.ppmData[0] || {}));
+                console.log('📋 PPM sample row:', validationData.ppmData[0]);
+                
+                validationData.ppmData.forEach(row => {
+                    const wbs = standardizeWBS(row['WBS Element ID']);
+                    if (!wbs) return;
+                    
+                    if (!wbsMap.has(wbs)) {
+                        wbsMap.set(wbs, {
+                            wbsCode: wbs,
+                            projectName: row['Project Name'] || 'Unknown Project',
+                            internalCost: 0,
+                            externalCost: 0,
+                            invoicedAmount: 0
+                        });
+                    }
+                    
+                    const cost = parseFloat(row['Cost €']) || 0;
+                    wbsMap.get(wbs).internalCost += cost;
+                });
+                console.log(`✅ Processed ${validationData.ppmData.length} PPM rows`);
+            }
+            
+            // Process EXT SAP data (external costs)
+            if (validationData.extSapData) {
+                console.log('📊 Processing EXT SAP data...');
+                console.log('📊 EXT SAP columns:', Object.keys(validationData.extSapData[0] || {}));
+                console.log('📊 EXT SAP sample row:', validationData.extSapData[0]);
+                
+                let processedCount = 0;
+                validationData.extSapData.forEach(row => {
+                    // Try different column names for WBS Element
+                    const wbs = standardizeWBS(row['WBS Element'] || row['WBS Element ID'] || row['WBS']);
+                    if (!wbs) {
+                        console.log('❌ No WBS found in row (tried: WBS Element, WBS Element ID, WBS):', row);
+                        return; // Skip this row, continue with next row
+                    }
+                    
+                    // Document type filter removed as requested
+                    
+                    if (!wbsMap.has(wbs)) {
+                        wbsMap.set(wbs, {
+                            wbsCode: wbs,
+                            projectName: row['CO object name'] || 'Unknown Project',
+                            internalCost: 0,
+                            externalCost: 0,
+                            invoicedAmount: 0
+                        });
+                    }
+                    
+                    const cost = parseFloat(row['Value']) || 0;
+                    wbsMap.get(wbs).externalCost += cost;
+                    processedCount++;
+                    
+                    if (processedCount <= 3) {
+                        console.log(`💰 EXT SAP: WBS ${wbs}, Cost ${cost}`);
+                    }
+                });
+                console.log(`✅ Processed ${processedCount} EXT SAP rows (filtered from ${validationData.extSapData.length})`);
+            }
+            
+            // Process I2E data (invoiced amounts)
+            if (validationData.i2eData) {
+                console.log('🧾 Processing I2E data...');
+                console.log('🧾 I2E columns:', Object.keys(validationData.i2eData[0] || {}));
+                console.log('🧾 I2E sample row:', validationData.i2eData[0]);
+                
+                let processedCount = 0;
+                validationData.i2eData.forEach(row => {
+                    // Try different column names for project ID
+                    const wbs = standardizeWBS(row.projectId || row['Project ID'] || row.ProjectID);
+                    if (!wbs) {
+                        console.log('❌ No project ID found in row (tried: projectId, Project ID, ProjectID):', row);
+                        return;
+                    }
+                    
+                    if (!wbsMap.has(wbs)) {
+                        wbsMap.set(wbs, {
+                            wbsCode: wbs,
+                            projectName: 'No internal or external cost found for this WBS',
+                            internalCost: 0,
+                            externalCost: 0,
+                            invoicedAmount: 0
+                        });
+                    }
+                    
+                    // Try different column names for total amount
+                    let amount = parseFloat(row.positionTotal || row['Total'] || row.Total) || 0;
+                    
+                    // Handle credit notes: if this is a credit note and amount is positive, make it negative
+                    const isCreditNote = row.creditNote || row['Credit Note'] || 
+                                        (row['File Name'] && row['File Name'].toLowerCase().includes('credit')) ||
+                                        (row.fileName && row.fileName.toLowerCase().includes('credit'));
+                    
+                    if (isCreditNote && amount > 0) {
+                        amount = -Math.abs(amount);
+                        if (processedCount <= 3) {
+                            console.log(`🔄 Credit note detected: converted ${Math.abs(amount)} to ${amount} for WBS ${wbs}`);
+                        }
+                    }
+                    
+                    wbsMap.get(wbs).invoicedAmount += amount;
+                    processedCount++;
+                    
+                    if (processedCount <= 3) {
+                        console.log(`💵 I2E: WBS ${wbs}, Amount ${amount}${isCreditNote ? ' (Credit Note)' : ''}`);
+                    }
+                });
+                console.log(`✅ Processed ${processedCount} I2E rows`);
+            }
+            
+            // Convert to array and calculate deltas
+            const results = Array.from(wbsMap.values()).map(item => {
+                item.totalCost = item.internalCost + item.externalCost;
+                item.delta = item.totalCost - item.invoicedAmount;
+                return item;
+            });
+            
+            // Sort by WBS code
+            results.sort((a, b) => a.wbsCode.localeCompare(b.wbsCode));
+            
+            console.log('🔍 Validation results:', results);
+            return results;
+        }
+
+        function standardizeWBS(wbsCode) {
+            if (!wbsCode) return null;
+            return wbsCode.toString().replace(/-EXN$/, '').trim().toUpperCase();
+        }
+
+        // ===== RESULTS DISPLAY =====
+        function displayValidationResults(results) {
+            const container = document.getElementById('validationResults');
+            const tbody = document.getElementById('validationTableBody');
+            
+            tbody.innerHTML = '';
+            
+            results.forEach(item => {
+                const row = document.createElement('tr');
+                
+                // Color coding based on delta and cost availability
+                if (item.internalCost === 0 && item.externalCost === 0) {
+                    row.style.backgroundColor = '#fef3c7'; // Yellow for no costs found
+                } else if (item.delta < 0) {
+                    row.style.backgroundColor = '#fee2e2'; // Red for over budget
+                } else if (item.delta > 0) {
+                    row.style.backgroundColor = '#d1fae5'; // Green for under budget
+                }
+                
+                row.innerHTML = `
+                    <td><input type="radio" name="selectedProject" value="${item.wbsCode}" onchange="onProjectSelected('${item.wbsCode}', '${item.projectName}')"></td>
+                    <td>${item.wbsCode}</td>
+                    <td>${item.projectName}</td>
+                    <td>${formatCurrency(item.internalCost)}</td>
+                    <td>${formatCurrency(item.externalCost)}</td>
+                    <td><strong>${formatCurrency(item.totalCost)}</strong></td>
+                    <td><strong>${formatCurrency(item.invoicedAmount)}</strong></td>
+                    <td><strong>${item.delta >= 0 ? '+' : ''}${formatCurrency(item.delta)}</strong></td>
+                    <td>
+                        <!-- Monthly breakdown removed -->
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+            
+            container.style.display = 'block';
+            
+            // Apply the default pending invoices filter immediately
+            setTimeout(() => {
+                // Ensure checkbox is checked (should be by default but double-check)
+                const pendingFilter = document.getElementById('pendingInvoicesFilter');
+                if (pendingFilter) {
+                    pendingFilter.checked = true;
+                }
+                filterProjects();
+            }, 100);
+            
+            // Show other tabs now that we have data
+            showAdditionalTabs();
+        }
+
+        function showAdditionalTabs() {
+            const detailsBtn = document.getElementById('detailsTabBtn');
+            if (detailsBtn) {
+                detailsBtn.style.display = '';
+            }
+        }
+
+        function hideAdditionalTabs() {
+            const detailsBtn = document.getElementById('detailsTabBtn');
+            if (detailsBtn) {
+                detailsBtn.style.display = 'none';
+            }
+            
+            // Switch back to overview tab if we're on a hidden tab
+            if (!document.getElementById('overviewTab').classList.contains('active')) {
+                switchTab('overview');
+            }
+        }
+
+        // ===== FILTER FUNCTIONALITY =====
+        function filterProjects() {
+            const filter = document.getElementById('projectFilter').value.toLowerCase();
+            const rows = document.querySelectorAll('#validationTableBody tr');
+            let visibleCount = 0;
+            
+            rows.forEach(row => {
+                const projectName = row.cells[1].textContent.toLowerCase();
+                const wbsCode = row.cells[0].textContent.toLowerCase();
+                
+                if (projectName.includes(filter) || wbsCode.includes(filter)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+            
+            // Show filter results
+            const filterResults = document.getElementById('filterResults');
+            if (filter) {
+                filterResults.innerHTML = `Showing ${visibleCount} of ${rows.length} projects matching "${filter}"`;
+                filterResults.style.display = 'block';
+            } else {
+                filterResults.style.display = 'none';
+            }
+        }
+
+        function clearProjectFilter() {
+            document.getElementById('projectFilter').value = '';
+            filterProjects();
+        }
+
+
+        // ===== TABLE SORTING FUNCTIONALITY =====
+        let sortDirection = {};
+        
+        function sortTable(columnIndex) {
+            const table = document.getElementById('validationTable');
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            // Determine sort direction - start with descending on first click
+            const currentDirection = sortDirection[columnIndex] || 'desc';
+            const newDirection = currentDirection === 'desc' ? 'asc' : 'desc';
+            sortDirection[columnIndex] = newDirection;
+            
+            // Update header indicators - show sort direction
+            const headers = table.querySelectorAll('th');
+            headers.forEach((header, index) => {
+                if (index < 7) { // Only update sortable columns
+                    const originalText = header.textContent.replace(/[↑↓↕️]/g, '').trim();
+                    
+                    if (index === columnIndex) {
+                        const arrow = newDirection === 'asc' ? '↑' : '↓';
+                        header.innerHTML = `${originalText} ${arrow}`;
+                    } else {
+                        header.innerHTML = `${originalText} ↕️`;
+                    }
+                }
+            });
+            
+            // Sort rows
+            rows.sort((a, b) => {
+                let aValue = a.cells[columnIndex].textContent.trim();
+                let bValue = b.cells[columnIndex].textContent.trim();
+                
+                // Handle currency values (remove currency symbols and convert to numbers)
+                if (columnIndex >= 2 && columnIndex <= 6) {
+                    aValue = parseFloat(aValue.replace(/[€,+\s]/g, '').replace(/^-/, '-')) || 0;
+                    bValue = parseFloat(bValue.replace(/[€,+\s]/g, '').replace(/^-/, '-')) || 0;
+                    
+                    if (newDirection === 'asc') {
+                        return aValue - bValue;
+                    } else {
+                        return bValue - aValue;
+                    }
+                } else {
+                    // Handle text values
+                    if (newDirection === 'asc') {
+                        return aValue.localeCompare(bValue);
+                    } else {
+                        return bValue.localeCompare(aValue);
+                    }
+                }
+            });
+            
+            // Re-append sorted rows
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        // ===== INVOICE DETAILS FUNCTIONALITY =====
+        
+        function loadInvoiceDetails(invoiceNumber) {
+            console.log(`🔍 Loading details for invoice: ${invoiceNumber}`);
+            
+            const detailsContent = document.getElementById('detailsContent');
+            const detailsPlaceholder = document.getElementById('detailsPlaceholder');
+            
+            // Find the invoice in pending invoices
+            const pendingInvoices = getPendingInvoices();
+            console.log('🔍 All pending invoices:', pendingInvoices);
+            const invoice = pendingInvoices.find(inv => inv.invoiceNumber === invoiceNumber);
+            console.log('🔍 Found invoice for details:', invoice);
+            
+            if (!invoice) {
+                // Show placeholder and clear content
+                if (detailsPlaceholder) detailsPlaceholder.style.display = 'block';
+                detailsContent.innerHTML = `
+                    <div class="card">
+                        <h4>❌ Invoice Not Found</h4>
+                        <p>Invoice ${invoiceNumber} not found in pending invoices.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Hide placeholder when showing content
+            if (detailsPlaceholder) detailsPlaceholder.style.display = 'none';
+            
+            // Check for multiple invoices in same project/month
+            const invoiceData = invoice.fullInvoiceData && invoice.fullInvoiceData[0] ? invoice.fullInvoiceData[0] : {};
+            const projectId = invoiceData.projectId || 'Unknown';
+            const monthOfInvoice = invoiceData.monthOfInvoice || 'Unknown';
+            
+            if (projectId !== 'Unknown' && monthOfInvoice !== 'Unknown') {
+                const otherInvoices = checkForMultipleInvoicesInMonth(invoiceNumber, projectId, monthOfInvoice);
+                if (otherInvoices.length > 0) {
+                    showMultipleInvoiceNotification(invoiceNumber, otherInvoices, projectId, monthOfInvoice);
+                }
+            }
+            
+            // Generate the detailed analysis
+            const detailsHtml = generateInvoiceDetailsHtml(invoice);
+            detailsContent.innerHTML = detailsHtml;
+        }
+        
+        function generateInvoiceDetailsHtml(invoice) {
+            const invoiceNumber = invoice.invoiceNumber;
+            const invoiceData = invoice.fullInvoiceData && invoice.fullInvoiceData[0] ? invoice.fullInvoiceData[0] : {};
+            const projectId = invoiceData.projectId || 'Unknown';
+            const wbsCode = standardizeWBS(projectId);
+            const invoiceDate = invoiceData.dateOfInvoice || 'Unknown';
+            const monthOfInvoice = invoiceData.monthOfInvoice || 'Unknown';
+            const invoiceTotal = invoiceData.extractedInvoiceTotal || 0;
+            const creditNote = invoiceData.creditNote || false;
+            
+            // Calculate costs using the same logic as pending invoices table
+            const costs = calculateInvoiceCosts(invoice, monthOfInvoice);
+            
+            // Get detailed cost breakdown
+            const costBreakdown = getDetailedCostBreakdown(invoice, monthOfInvoice);
+            
+            return `
+                <!-- Invoice Summary Card -->
+                <div class="card" style="margin-bottom: 1.5rem; ${creditNote ? 'background: #f0f9ff; border-left: 4px solid #0ea5e9;' : ''}">
+                    <h4>${creditNote ? '💳 Credit Note Summary' : '🧾 Invoice Summary'}</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2rem; margin: 1rem 0;">
+                        <div>
+                            <strong>Project:</strong><br>
+                            <span style="font-family: monospace;">${projectId}</span>
+                        </div>
+                        <div>
+                            <strong>Invoice Date:</strong><br>
+                            ${invoiceDate}<br>
+                            <small>Month: ${monthOfInvoice}</small>
+                        </div>
+                        <div>
+                            <strong>Total Amount:</strong><br>
+                            <span style="font-size: 1.2rem; font-weight: bold; color: ${creditNote ? '#0ea5e9' : '#059669'};">
+                                ${formatCurrency(invoiceTotal)} ${invoiceData.currency || 'EUR'}
+                            </span><br>
+                            <small>${creditNote ? 'Credit Note' : 'Invoice'}</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Cost Comparison Card -->
+                <div class="card" style="margin-bottom: 1.5rem;">
+                    <h4>💰 Cost Comparison (Month: ${monthOfInvoice})</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2rem; margin: 1rem 0;">
+                        <div>
+                            <strong>Internal Cost (PPM):</strong><br>
+                            <span style="font-size: 1.1rem; font-weight: bold;">
+                                ${formatCurrency(costs.internalCost)} EUR
+                            </span><br>
+                            <small>From PPM data</small>
+                        </div>
+                        <div>
+                            <strong>External Cost (EXT SAP):</strong><br>
+                            <span style="font-size: 1.1rem; font-weight: bold;">
+                                ${formatCurrency(costs.externalCost)} EUR
+                            </span><br>
+                            <small>From EXT SAP data</small>
+                        </div>
+                        <div>
+                            <strong>Total cost:</strong><br>
+                            <span style="font-size: 1.1rem; font-weight: bold;">
+                                ${formatCurrency(costs.totalCost)} EUR
+                            </span><br>
+                            <small>PPM + EXT SAP</small>
+                        </div>
+                        <div>
+                            <strong>Total cost -/- Invoice:</strong><br>
+                            <span style="font-size: 1.1rem; font-weight: bold; color: ${Math.abs(invoiceTotal - costs.totalCost) < 0.01 ? '#059669' : '#dc2626'};">
+                                ${invoiceTotal - costs.totalCost >= 0 ? '+' : ''}${formatCurrency(invoiceTotal - costs.totalCost)} EUR
+                            </span><br>
+                            <small>${Math.abs(invoiceTotal - costs.totalCost) < 0.01 ? 'Match' : 'Variance'}</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Invoice Line Items -->
+                ${generateInvoiceLineItemsHtml(invoice)}
+                
+                <!-- Detailed Cost Breakdown -->
+                ${generateDetailedCostBreakdownHtml(costBreakdown, monthOfInvoice)}
+                
+                <!-- Actions -->
+                <div class="card" style="text-align: center;">
+                    <h4>🎯 Actions</h4>
+                    <div style="display: flex; justify-content: center; gap: 1rem;">
+                        <button class="btn btn-success" onclick="handleApproveInvoice('${invoiceNumber}')">
+                            ✅ Approve Invoice
+                        </button>
+                        <button class="btn btn-warning" onclick="handleRejectInvoice('${invoiceNumber}')">
+                            ❌ Reject Invoice  
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function generateInvoiceLineItemsHtml(invoice) {
+            console.log('🔍 generateInvoiceLineItemsHtml called with invoice:', invoice);
+            console.log('🔍 invoice.fullInvoiceData:', invoice.fullInvoiceData);
+            console.log('🔍 invoice.fullInvoiceData is array?', Array.isArray(invoice.fullInvoiceData));
+            console.log('🔍 invoice.fullInvoiceData length:', invoice.fullInvoiceData ? invoice.fullInvoiceData.length : 'undefined');
+            
+            if (!invoice.fullInvoiceData || !Array.isArray(invoice.fullInvoiceData)) {
+                console.log('❌ No line item data available or not array');
+                return '<div class="card"><h4>📋 Line Items</h4><p>No line item data available.</p></div>';
+            }
+            
+            // Handle nested fullInvoiceData structure
+            let lineItems = invoice.fullInvoiceData;
+            
+            // Check if we have a nested structure where fullInvoiceData[0] contains the actual line items
+            if (lineItems.length === 1 && lineItems[0].fullInvoiceData && Array.isArray(lineItems[0].fullInvoiceData)) {
+                console.log('🔍 Detected nested structure, using inner fullInvoiceData');
+                lineItems = lineItems[0].fullInvoiceData;
+            }
+            
+            console.log('🔍 Final line items to process:', lineItems);
+            console.log('🔍 Final line items count:', lineItems.length);
+            
+            let html = `
+                <div class="card" style="margin-bottom: 1.5rem;">
+                    <h4>📋 Invoice Line Items (${lineItems.length} items)</h4>
+                    <div style="overflow-x: auto;">
+                        <table class="data-table" style="min-width: 1000px;">
+                            <thead>
+                                <tr>
+                                    <th>Position</th>
+                                    <th>Material</th>
+                                    <th>Description</th>
+                                    <th>Quantity</th>
+                                    <th>Unit</th>
+                                    <th>Unit Price</th>
+                                    <th>Total</th>
+                                    <th>Type</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            
+            lineItems.forEach(item => {
+                const isCreditNote = item.creditNote || false;
+                const rowStyle = isCreditNote ? 'background-color: #f0f9ff;' : '';
+                
+                html += `
+                    <tr style="${rowStyle}">
+                        <td>${item.position || '-'}</td>
+                        <td>${item.material || '-'}</td>
+                        <td style="max-width: 300px;">${item.positionDescription || '-'}</td>
+                        <td>${item.positionQuantity || '-'}</td>
+                        <td>${item.unit || '-'}</td>
+                        <td>${formatCurrency(item.unitPrice || 0)}</td>
+                        <td><strong>${formatCurrency(item.positionTotal || 0)}</strong></td>
+                        <td>${item.typeCost || 'Unknown'}</td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+        
+        function getDetailedCostBreakdown(invoice, monthOfInvoice) {
+            const projectId = getProjectId(invoice);
+            const wbsCode = standardizeWBS(projectId);
+            const invoiceDate = getInvoiceDate(invoice);
+            
+            const breakdown = {
+                ppmData: [],
+                extSapData: [],
+                filters: {
+                    wbsCode: wbsCode,
+                    monthOfInvoice: monthOfInvoice,
+                    invoiceDate: invoiceDate
+                }
+            };
+            
+            // Get PPM data matches
+            if (validationData.ppmData) {
+                const invoiceMonthName = monthOfInvoice ? monthOfInvoice.split(' ')[0] : null;
+                
+                validationData.ppmData.forEach(row => {
+                    const rowWbs = standardizeWBS(row['WBS Element ID']);
+                    const rowMonthOfInvoice = row['Month of invoice'];
+                    
+                    if (rowWbs === wbsCode && rowMonthOfInvoice === invoiceMonthName) {
+                        breakdown.ppmData.push({
+                            wbs: rowWbs,
+                            month: rowMonthOfInvoice,
+                            user: row.User || '-',
+                            role: row['Role 2025'] || '-',
+                            rate: row['Rate 2025'] || 0,
+                            cost: parseFloat(row['Cost €']) || 0,
+                            project: row['Project Name'] || '-'
+                        });
+                    }
+                });
+            }
+            
+            // Get EXT SAP data matches
+            if (validationData.extSapData) {
+                let targetPeriod = null;
+                let targetFiscalYear = null;
+                
+                if (invoiceDate && invoiceDate !== 'Unknown') {
+                    const dateParts = invoiceDate.split('.');
+                    if (dateParts.length >= 3) {
+                        targetPeriod = parseInt(dateParts[1]);
+                        targetFiscalYear = parseInt(dateParts[2]);
+                    }
+                }
+                
+                if (targetPeriod && targetFiscalYear) {
+                    validationData.extSapData.forEach(row => {
+                        const rowWbs = standardizeWBS(row['WBS Element'] || row['WBS Element ID'] || row['WBS']);
+                        const period = parseInt(row['Period']);
+                        const fiscalYear = parseInt(row['Fiscal Year']);
+                        
+                        if (rowWbs === wbsCode && period === targetPeriod && fiscalYear === targetFiscalYear) {
+                            breakdown.extSapData.push({
+                                wbs: rowWbs,
+                                period: period,
+                                fiscalYear: fiscalYear,
+                                costElement: row['Cost Element'] || '-',
+                                costElementName: row['Cost element name'] || '-',
+                                value: parseFloat(row.Value) || 0,
+                                documentType: row['Document type'] || '-',
+                                documentDate: row['Document Date'] || '-'
+                            });
+                        }
+                    });
+                }
+            }
+            
+            return breakdown;
+        }
+        
+        function generateDetailedCostBreakdownHtml(breakdown, monthOfInvoice) {
+            let html = `
+                <div class="card" style="margin-bottom: 1.5rem;">
+                    <h4>🔍 Detailed Cost Breakdown (${monthOfInvoice})</h4>
+                    <p style="margin-bottom: 1rem;">
+                        <strong>Filters Applied:</strong> WBS = ${breakdown.filters.wbsCode}, 
+                        Month = ${monthOfInvoice}, Date = ${breakdown.filters.invoiceDate}
+                    </p>
+            `;
+            
+            // PPM Data Table
+            html += `
+                <h5 style="color: #7c3aed; margin-top: 1.5rem;">📋 PPM Data Matches (${breakdown.ppmData.length} rows)</h5>
+            `;
+            
+            if (breakdown.ppmData.length > 0) {
+                html += `
+                    <div style="overflow-x: auto;">
+                        <table class="data-table" style="min-width: 800px;">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Role</th>
+                                    <th>Rate</th>
+                                    <th>Cost €</th>
+                                    <th>Month</th>
+                                    <th>Project</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                breakdown.ppmData.forEach(item => {
+                    html += `
+                        <tr>
+                            <td>${item.user}</td>
+                            <td>${item.role}</td>
+                            <td>${formatCurrency(item.rate)}</td>
+                            <td><strong>${formatCurrency(item.cost)}</strong></td>
+                            <td>${item.month}</td>
+                            <td style="max-width: 200px;">${item.project}</td>
+                        </tr>
+                    `;
+                });
+                
+                const totalPPM = breakdown.ppmData.reduce((sum, item) => sum + item.cost, 0);
+                html += `
+                        <tr style="background-color: #f3f4f6; font-weight: bold;">
+                            <td colspan="3">Total Internal Cost</td>
+                            <td><strong>${formatCurrency(totalPPM)}</strong></td>
+                            <td colspan="2"></td>
+                        </tr>
+                `;
+                
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } else {
+                html += '<p style="color: #6b7280; font-style: italic;">No PPM data found for this month/project combination.</p>';
+            }
+            
+            // EXT SAP Data Table
+            html += `
+                <h5 style="color: #dc2626; margin-top: 1.5rem;">📊 EXT SAP Data Matches (${breakdown.extSapData.length} rows)</h5>
+            `;
+            
+            if (breakdown.extSapData.length > 0) {
+                html += `
+                    <div style="overflow-x: auto;">
+                        <table class="data-table" style="min-width: 800px;">
+                            <thead>
+                                <tr>
+                                    <th>Cost Element</th>
+                                    <th>Description</th>
+                                    <th>Value €</th>
+                                    <th>Period</th>
+                                    <th>Fiscal Year</th>
+                                    <th>Doc Type</th>
+                                    <th>Doc Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                breakdown.extSapData.forEach(item => {
+                    html += `
+                        <tr>
+                            <td>${item.costElement}</td>
+                            <td style="max-width: 200px;">${item.costElementName}</td>
+                            <td><strong>${formatCurrency(item.value)}</strong></td>
+                            <td>${item.period}</td>
+                            <td>${item.fiscalYear}</td>
+                            <td>${item.documentType}</td>
+                            <td>${item.documentDate}</td>
+                        </tr>
+                    `;
+                });
+                
+                const totalExtSap = breakdown.extSapData.reduce((sum, item) => sum + item.value, 0);
+                html += `
+                        <tr style="background-color: #f3f4f6; font-weight: bold;">
+                            <td colspan="2">Total External Cost</td>
+                            <td><strong>${formatCurrency(totalExtSap)}</strong></td>
+                            <td colspan="4"></td>
+                        </tr>
+                `;
+                
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } else {
+                html += '<p style="color: #6b7280; font-style: italic;">No EXT SAP data found for this month/project combination.</p>';
+            }
+            
+            html += '</div>';
+            return html;
+        }
+
+        // ===== UTILITY FUNCTIONS =====
+        function clearAllData() {
+            validationData = {
+                ppmData: [],
+                extSapData: [],
+                i2eData: [],
+                processedResults: null,
+                currentWBS: null,
+                currentMonth: null,
+                cachedInvoices: null,
+                selectedInvoices: [],
+                sourceFiles: {
+                    ppm: [],
+                    extSap: [],
+                    i2e: []
+                },
+                consolidationStats: {
+                    totalFiles: 0,
+                    ppmTabs: 0,
+                    extSapTabs: 0,
+                    i2eTabs: 0,
+                    duplicatesRemoved: {
+                        ppm: 0,
+                        extSap: 0,
+                        i2e: 0
+                    }
+                }
+            };
+            
+            // Reset file input
+            document.getElementById('excelFile').value = '';
+            
+            // Reset file info displays
+            updateFileInfo('ppm');
+            updateFileInfo('extSap');
+            updateFileInfo('i2e');
+            
+            // Hide results and additional tabs
+            document.getElementById('validationResults').style.display = 'none';
+            hideAdditionalTabs();
+            
+            checkReadyToProcess();
+            showNotification('All data cleared', 'info');
+        }
+
+        function exportValidationResults() {
+            if (!validationData.processedResults) {
+                showNotification('No validation results to export', 'warning');
+                return;
+            }
+            
+            // This will be implemented using the existing Excel export functionality
+            showNotification('Export functionality will be implemented soon', 'info');
+        }
+
+        function showNotification(message, type = 'info') {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        // ===== INITIALIZATION =====
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('I2E Invoice Validator loaded');
+            
+            // Setup upload zone event listeners
+            const uploadZone = document.getElementById('uploadZone');
+            const fileInput = document.getElementById('excelFile');
+            
+            // Click to browse
+            uploadZone.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            // File input change
+            fileInput.addEventListener('change', handleExcelUpload);
+            
+            // Drag and drop functionality
+            uploadZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadZone.classList.add('dragover');
+            });
+            
+            uploadZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                uploadZone.classList.remove('dragover');
+            });
+            
+            uploadZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadZone.classList.remove('dragover');
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    // Use the unified file handling for both single and multiple files
+                    const fakeEvent = {
+                        target: {
+                            files: files
+                        }
+                    };
+                    handleExcelUpload(fakeEvent);
+                }
+            });
+            
+            // Check if we have recent I2E data
+            if (typeof extractedData !== 'undefined' && extractedData.length > 0) {
+                const currentTime = new Date().toLocaleString();
+                updateFileInfo('i2e', `${extractedData.length} invoices processed`, currentTime, 'success');
+                checkReadyToProcess();
+            }
+        });
+
+        // ===== PENDING INVOICES HELPER FUNCTIONS =====
+        
+        function getMonthOfInvoice(invoice) {
+            if (invoice.fullInvoiceData && invoice.fullInvoiceData[0]) {
+                return invoice.fullInvoiceData[0].monthOfInvoice || 'Unknown';
+            }
+            if (invoice.summary) {
+                return invoice.summary.monthOfInvoice || 'Unknown';
+            }
+            return 'Unknown';
+        }
+        
+        function getInvoiceDate(invoice) {
+            if (invoice.fullInvoiceData && invoice.fullInvoiceData[0]) {
+                return invoice.fullInvoiceData[0].dateOfInvoice || 'Unknown';
+            }
+            if (invoice.summary) {
+                return invoice.summary.invoiceDate || 'Unknown';
+            }
+            return 'Unknown';
+        }
+        
+        function calculateInvoiceCosts(invoice, monthOfInvoice) {
+            const projectId = getProjectId(invoice);
+            const wbsCode = standardizeWBS(projectId);
+            const invoiceDate = getInvoiceDate(invoice);
+            
+            let internalCost = 0;
+            let externalCost = 0;
+            
+            console.log(`🔍 Calculating costs for invoice ${getInvoiceNumber(invoice)}: WBS=${wbsCode}, Month=${monthOfInvoice}, Date=${invoiceDate}`);
+            
+            // Process PPM data (internal costs) - FILTER BY MONTH OF INVOICE
+            if (validationData.ppmData) {
+                // Extract just the month name from monthOfInvoice (e.g., "April 2025" -> "April")
+                const invoiceMonthName = monthOfInvoice ? monthOfInvoice.split(' ')[0] : null;
+                console.log(`🔍 PPM Filtering: Looking for WBS=${wbsCode}, Month=${invoiceMonthName} (from ${monthOfInvoice})`);
+                console.log(`🔍 PPM Data available: ${validationData.ppmData.length} rows`);
+                
+                let ppmChecked = 0;
+                let ppmMatches = 0;
+                
+                validationData.ppmData.forEach(row => {
+                    const rowWbs = standardizeWBS(row['WBS Element ID']);
+                    const rowMonthOfInvoice = row['Month of invoice']; // Format: "April"
+                    
+                    ppmChecked++;
+                    if (ppmChecked <= 5) {
+                        console.log(`🔍 PPM Row ${ppmChecked}: WBS=${rowWbs}, Month=${rowMonthOfInvoice}`);
+                    }
+                    
+                    // Match both WBS and Month name only (not year)
+                    if (rowWbs === wbsCode && rowMonthOfInvoice === invoiceMonthName) {
+                        const cost = parseFloat(row['Cost €']) || 0;
+                        internalCost += cost;
+                        ppmMatches++;
+                        
+                        console.log(`✅ PPM match ${ppmMatches}: WBS=${rowWbs}, Month=${rowMonthOfInvoice}, Cost=${cost}`);
+                    }
+                });
+                
+                console.log(`📊 PPM Summary: Checked ${ppmChecked} rows, found ${ppmMatches} matches, Total Internal Cost: ${internalCost}`);
+            } else {
+                console.log(`❌ PPM data not available for filtering`);
+            }
+            
+            // Process EXT SAP data (external costs) - FILTER BY PERIOD AND FISCAL YEAR
+            if (validationData.extSapData) {
+                // Extract month and year from invoice date (format: dd.mm.yyyy)
+                let targetPeriod = null;
+                let targetFiscalYear = null;
+                
+                if (invoiceDate && invoiceDate !== 'Unknown') {
+                    const dateParts = invoiceDate.split('.');
+                    if (dateParts.length >= 3) {
+                        targetPeriod = parseInt(dateParts[1]); // Month as number (04 -> 4)
+                        targetFiscalYear = parseInt(dateParts[2]); // Year (2025)
+                    }
+                }
+                
+                if (targetPeriod && targetFiscalYear) {
+                    console.log(`🔍 EXT SAP Filtering: Looking for WBS=${wbsCode}, Period=${targetPeriod}, FiscalYear=${targetFiscalYear}`);
+                    console.log(`🔍 EXT SAP Data available: ${validationData.extSapData.length} rows`);
+                    
+                    let extSapChecked = 0;
+                    let extSapMatches = 0;
+                    
+                    validationData.extSapData.forEach(row => {
+                        const rowWbs = standardizeWBS(row['WBS Element'] || row['WBS Element ID'] || row['WBS']);
+                        const period = parseInt(row['Period']); // Month as number
+                        const fiscalYear = parseInt(row['Fiscal Year']); // Year
+                        
+                        extSapChecked++;
+                        if (extSapChecked <= 5) {
+                            console.log(`🔍 EXT SAP Row ${extSapChecked}: WBS=${rowWbs}, Period=${period}, FiscalYear=${fiscalYear}`);
+                        }
+                        
+                        // Match WBS, Period (month), and Fiscal Year
+                        if (rowWbs === wbsCode && period === targetPeriod && fiscalYear === targetFiscalYear) {
+                            const cost = parseFloat(row.Value) || 0;
+                            externalCost += cost;
+                            extSapMatches++;
+                            
+                            console.log(`✅ EXT SAP match ${extSapMatches}: WBS=${rowWbs}, Period=${period}, FiscalYear=${fiscalYear}, Cost=${cost}`);
+                        }
+                    });
+                    
+                    console.log(`📊 EXT SAP Summary: Checked ${extSapChecked} rows, found ${extSapMatches} matches, Total External Cost: ${externalCost}`);
+                } else {
+                    console.log(`❌ Could not parse invoice date for EXT SAP filtering: ${invoiceDate}`);
+                }
+            }
+            
+            const result = {
+                internalCost: internalCost,
+                externalCost: externalCost,
+                totalCost: internalCost + externalCost
+            };
+            
+            console.log(`📊 Final costs for ${getInvoiceNumber(invoice)}: Internal=${internalCost}, External=${externalCost}, Total=${result.totalCost}`);
+            
+            return result;
+        }
+
+        // ===== PROJECT SELECTION AND FILTERING FUNCTIONALITY =====
+        
+        let selectedProjectWBS = null;
+        let selectedProjectName = null;
+        let currentProjectFilter = null;
+
+        function onProjectSelected(wbsCode, projectName) {
+            selectedProjectWBS = wbsCode;
+            selectedProjectName = projectName;
+            
+            // Enable the validate button
+            const validateBtn = document.getElementById('validateProjectBtn');
+            validateBtn.disabled = false;
+            validateBtn.innerHTML = `🔍 Validate invoices for ${projectName}`;
+            
+            console.log(`✅ Project selected: ${projectName} (${wbsCode})`);
+        }
+
+        function validateSelectedProject() {
+            if (!selectedProjectWBS || !selectedProjectName) {
+                alert('Please select a project first.');
+                return;
+            }
+            
+            console.log(`🔍 Validating invoices for project: ${selectedProjectName} (${selectedProjectWBS})`);
+            
+            // Set the project filter
+            currentProjectFilter = {
+                wbsCode: selectedProjectWBS,
+                projectName: selectedProjectName
+            };
+            
+            // Switch to Pending Invoices tab
+            switchTab('pending');
+            
+            // Apply the project filter
+            applyProjectFilterToPendingInvoices();
+        }
+
+        function applyProjectFilterToPendingInvoices() {
+            if (!currentProjectFilter) return;
+            
+            // Show the filter bar
+            const filterBar = document.getElementById('projectFilterBar');
+            const projectNameSpan = document.getElementById('filteredProjectName');
+            
+            filterBar.style.display = 'block';
+            projectNameSpan.textContent = `${currentProjectFilter.projectName} (${currentProjectFilter.wbsCode})`;
+            
+            // Filter the pending invoices table
+            filterPendingInvoicesTable();
+            
+            console.log(`🎯 Applied project filter: ${currentProjectFilter.projectName}`);
+        }
+
+        function filterPendingInvoicesTable() {
+            const tableBody = document.getElementById('pendingInvoicesTableBody');
+            const rows = tableBody.querySelectorAll('tr');
+            let visibleCount = 0;
+            
+            rows.forEach(row => {
+                const projectCell = row.cells[2]; // Project column (index 2)
+                if (projectCell) {
+                    const projectText = projectCell.textContent.trim();
+                    const shouldShow = !currentProjectFilter || projectText.includes(currentProjectFilter.wbsCode);
+                    
+                    row.style.display = shouldShow ? '' : 'none';
+                    if (shouldShow) visibleCount++;
+                }
+            });
+            
+            // Update info text
+            const infoBar = document.getElementById('pendingInfoBar');
+            const infoText = document.getElementById('pendingInfoText');
+            
+            if (currentProjectFilter) {
+                infoText.innerHTML = `Showing ${visibleCount} pending invoices for project <strong>${currentProjectFilter.projectName}</strong>`;
+                infoBar.style.display = 'block';
+            }
+            
+            console.log(`📊 Filtered pending invoices: ${visibleCount} visible`);
+        }
+
+        function clearPendingProjectFilter() {
+            currentProjectFilter = null;
+            
+            // Hide the filter bar
+            const filterBar = document.getElementById('projectFilterBar');
+            filterBar.style.display = 'none';
+            
+            // Show all rows
+            const tableBody = document.getElementById('pendingInvoicesTableBody');
+            const rows = tableBody.querySelectorAll('tr');
+            
+            rows.forEach(row => {
+                row.style.display = '';
+            });
+            
+            // Update info text
+            const infoText = document.getElementById('pendingInfoText');
+            infoText.textContent = 'Showing all pending invoices';
+            
+            console.log('🗑️ Cleared project filter');
+        }
+
+        // Modify the existing filterProjects function to handle pending invoices filter
+        function filterProjects() {
+            const projectFilter = document.getElementById('projectFilter').value.toLowerCase();
+            const pendingInvoicesFilter = document.getElementById('pendingInvoicesFilter').checked;
+            
+            console.log(`🔍 Filtering projects: name="${projectFilter}", pendingOnly=${pendingInvoicesFilter}`);
+            
+            // Get pending invoices to check which projects have pending invoices
+            let projectsWithPendingInvoices = new Set();
+            if (pendingInvoicesFilter) {
+                const pendingInvoices = getPendingInvoices();
+                pendingInvoices.forEach(invoice => {
+                    const invoiceData = invoice.fullInvoiceData && invoice.fullInvoiceData[0] ? invoice.fullInvoiceData[0] : {};
+                    const projectId = invoiceData.projectId;
+                    if (projectId) {
+                        const wbsCode = standardizeWBS(projectId);
+                        if (wbsCode) {
+                            projectsWithPendingInvoices.add(wbsCode);
+                        }
+                    }
+                });
+                console.log(`📋 Projects with pending invoices:`, Array.from(projectsWithPendingInvoices));
+            }
+            
+            // Filter the validation table rows
+            const tableBody = document.getElementById('validationTableBody');
+            const rows = tableBody.querySelectorAll('tr');
+            let visibleCount = 0;
+            
+            rows.forEach(row => {
+                const wbsCell = row.cells[1]; // WBS Code column (index 1 now because of selection column)
+                const projectCell = row.cells[2]; // Project Name column (index 2 now)
+                
+                if (wbsCell && projectCell) {
+                    const wbsCode = wbsCell.textContent.trim();
+                    const projectName = projectCell.textContent.toLowerCase();
+                    
+                    // Check name filter
+                    const nameMatch = !projectFilter || projectName.includes(projectFilter);
+                    
+                    // Check pending invoices filter
+                    const pendingMatch = !pendingInvoicesFilter || projectsWithPendingInvoices.has(wbsCode);
+                    
+                    const shouldShow = nameMatch && pendingMatch;
+                    row.style.display = shouldShow ? '' : 'none';
+                    
+                    if (shouldShow) visibleCount++;
+                }
+            });
+            
+            // Update filter results
+            const filterResults = document.getElementById('filterResults');
+            if (projectFilter || pendingInvoicesFilter) {
+                filterResults.style.display = 'block';
+                let filterText = `Showing ${visibleCount} projects`;
+                if (projectFilter) filterText += ` matching "${projectFilter}"`;
+                if (pendingInvoicesFilter) filterText += ` with pending invoices`;
+                filterResults.innerHTML = `<div style="color: #059669; font-weight: 500;">${filterText}</div>`;
+            } else {
+                filterResults.style.display = 'none';
+            }
+            
+            console.log(`📊 Filtered projects: ${visibleCount} visible`);
+        }
+
+        function clearProjectFilter() {
+            document.getElementById('projectFilter').value = '';
+            document.getElementById('pendingInvoicesFilter').checked = true; // Reset to default
+            filterProjects();
+        }
+
+    </script>
+</body>
+</html>

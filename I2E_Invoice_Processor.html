@@ -1,0 +1,1747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>I2E Invoice Processor</title>
+    
+    <!-- External Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+    
+    <!-- I2E Modules -->
+    <script src="shared/i2e-common.js"></script>
+    <script src="shared/i2e-cache.js"></script>
+    <script src="shared/i2e-spy.js"></script>
+    <script src="shared/pdf-extractor.js"></script>
+    <script src="shared/excel-exporter.js"></script>
+    
+    <!-- Shared Styles -->
+    <link rel="stylesheet" href="assets/i2e-styles.css">
+    
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header" style="position: relative;">
+            <h1>🧾 I2E Invoice Processor</h1>
+            <p>Zero-cost, frontend-only PDF invoice data extraction to Excel</p>
+            
+        </div>
+        
+        <!-- File Upload Section -->
+        <div class="card">
+            <h2>Upload Invoices</h2>
+            <div class="upload-zone" id="uploadZone">
+                <div class="upload-icon">📄</div>
+                <div class="upload-text">
+                    <strong>Drop PDF files here or click to browse</strong>
+                    <br>
+                    <small>Supports multiple files • No file limit • Credit notes supported</small>
+                </div>
+                <input type="file" id="fileInput" class="file-input" multiple accept=".pdf">
+            </div>
+            
+            <div class="file-list" id="fileList">
+                <!-- Files will be dynamically added here -->
+            </div>
+            
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-text" id="progressText">Processing...</div>
+            </div>
+            
+            <div class="text-center mt-2">
+                <button class="btn" id="processBtn" disabled>🔄 Process Invoices</button>
+            </div>
+        </div>
+        
+        <!-- Data Review Section -->
+        <div class="card" id="dataReviewCard" style="display: none;">
+            <h2>Review Extracted Data</h2>
+            <p class="mb-1">Review and edit the extracted invoice data before exporting to Excel.</p>
+            
+            <div id="validationSummary" class="mb-2">
+                <!-- Validation summary will be displayed here -->
+            </div>
+            
+            <div style="overflow-x: auto;">
+                <table class="data-table" id="dataTable">
+                    <thead>
+                        <tr>
+                            <th>Position</th>
+                            <th>Material</th>
+                            <th>Cost Type</th>
+                            <th>Description</th>
+                            <th>Quantity</th>
+                            <th>Unit</th>
+                            <th>VAT</th>
+                            <th>Unit Price</th>
+                            <th>Total</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                            <th colspan="2"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataTableBody">
+                        <!-- Data rows will be dynamically added here -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Cache Status Panel -->
+            <div id="cacheStatusPanel" class="cache-status-panel" style="display: none; margin: 1rem 0; padding: 1rem; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #0ea5e9;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <span style="font-size: 1.2rem;">📋</span>
+                        <div>
+                            <div style="font-weight: 500; color: #0c4a6e;">Cache Status</div>
+                            <div id="cacheStatusText" style="font-size: 0.9rem; color: #075985;">Loading...</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="exportCacheData()">📤 Export Cache</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Action Buttons -->
+            <div class="text-center mt-2" style="display: flex; gap: 1rem; justify-content: center;">
+                <button class="btn btn-success" onclick="openFieldSelection()">📊 Configure & Export to Excel</button>
+                <button class="btn btn-primary" id="validatorBtn" onclick="openInvoiceValidator()">🔍 Invoice Validator</button>
+            </div>
+        </div>
+        
+    </div>
+
+    <!-- Field Selection Modal -->
+    <div id="fieldSelectionModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Configure Excel Export Fields</h2>
+                <button class="close-btn" onclick="closeFieldSelection()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Select and order the fields you want to export to Excel:</p>
+                
+                <div class="field-selection-container">
+                    <div class="field-list-section">
+                        <h3>Available Fields</h3>
+                        <div class="field-list" id="availableFields">
+                            <!-- Available fields will be populated here -->
+                        </div>
+                    </div>
+                    
+                    <div class="field-controls">
+                        <button class="btn" onclick="moveToSelected()">→</button>
+                        <button class="btn" onclick="moveToAvailable()">←</button>
+                    </div>
+                    
+                    <div class="field-list-section">
+                        <h3>Selected Fields (Export Order)</h3>
+                        <div class="field-list" id="selectedFields">
+                            <!-- Selected fields will be populated here -->
+                        </div>
+                    </div>
+                    
+                    <div class="order-controls">
+                        <button class="btn" onclick="moveFieldUp()">↑</button>
+                        <button class="btn" onclick="moveFieldDown()">↓</button>
+                    </div>
+                </div>
+                
+                <div class="preset-controls">
+                    <h3>Quick Presets:</h3>
+                    <button class="btn" onclick="applyDefaultPreset()">📋 Default Fields</button>
+                    <button class="btn" onclick="applyDetailedPreset()">📊 Detailed Report</button>
+                    <button class="btn" onclick="applySummaryPreset()">📈 Summary Only</button>
+                    <button class="btn" onclick="selectAllFields()">📋 All Fields</button>
+                </div>
+                
+                <div class="config-controls">
+                    <h3>Configuration:</h3>
+                    <button class="btn" onclick="saveFieldConfig()">🍪 Save Config</button>
+                    <button class="btn" onclick="loadFieldConfig()">📂 Load Saved Config</button>
+                    <button class="btn btn-warning" onclick="clearFieldConfig()">🗑️ Clear Saved Config</button>
+                    <div id="configStatus" style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeFieldSelection()">Cancel</button>
+                <button class="btn btn-success" onclick="exportWithSelectedFields()">📊 Export to Excel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Line Item Modal -->
+    <div id="editItemModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Line Item</h2>
+                <button class="close-btn" onclick="closeEditModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="edit-form" id="editForm">
+                    <!-- Edit form will be populated here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeEditModal()">Cancel</button>
+                <button class="btn btn-success" onclick="saveLineItemEdit()">💾 Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // Global variables
+        let uploadedFiles = [];
+        let extractedData = [];
+        let currentEditingItem = null;
+        let selectedFieldItems = [];
+        let availableFieldItems = [];
+        
+        // Available fields for export
+        const allFields = {
+            fileName: { name: 'File Name', description: 'Original PDF filename' },
+            projectId: { name: 'Project ID', description: 'Project identifier (e.g., BE44-PRO0023366)' },
+            customerId: { name: 'Customer ID', description: 'Customer identifier' },
+            invoiceNumber: { name: 'Invoice Number', description: 'Invoice/Credit note number' },
+            dateOfInvoice: { name: 'Invoice Date', description: 'Date of the invoice' },
+            monthOfInvoice: { name: 'Month', description: 'Month of invoice date' },
+            currency: { name: 'Currency', description: 'Invoice currency (EUR, USD, etc.)' },
+            vat: { name: 'VAT ID', description: 'VAT identification number' },
+            creditNote: { name: 'Credit Note', description: 'Whether this is a credit note' },
+            serviceProvisionPeriod: { name: 'Service Period', description: 'Service provision period' },
+            position: { name: 'Position', description: 'Line item position number' },
+            material: { name: 'Material', description: 'Material/service code' },
+            typeCost: { name: 'Cost Type', description: 'Internal or External cost' },
+            positionDescription: { name: 'Description', description: 'Item description' },
+            positionQuantity: { name: 'Quantity', description: 'Quantity of items' },
+            unit: { name: 'Unit', description: 'Unit of measurement (H, PU, etc.)' },
+            unitPrice: { name: 'Unit Price', description: 'Price per unit' },
+            positionTotal: { name: 'Total', description: 'Total amount for this line item' }
+        };
+        
+        // Default field selection (as requested)
+        const defaultSelectedFields = [
+            'fileName', 'customerId', 'invoiceNumber', 'dateOfInvoice', 
+            'projectId', 'serviceProvisionPeriod', 'positionQuantity', 
+            'unitPrice', 'positionTotal'
+        ];
+        
+        // Initialize PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeApp();
+        });
+        
+        function initializeApp() {
+            setupFileUpload();
+            setupEventListeners();
+            displayCacheStatus();
+            console.log('🚀 I2E Invoice Processor initialized successfully!');
+        }
+        
+        function displayCacheStatus() {
+            try {
+                const cacheStats = getCacheStats();
+                console.log('📊 Cache Status:', cacheStats);
+                
+                // Update cache status panel
+                const statusPanel = document.getElementById('cacheStatusPanel');
+                const statusText = document.getElementById('cacheStatusText');
+                const validatorBtn = document.getElementById('validatorBtn');
+                
+                if (cacheStats.counts.total > 0) {
+                    // Show cache panel
+                    statusPanel.style.display = 'block';
+                    
+                    // Update status text
+                    const parts = [];
+                    if (cacheStats.counts.pending > 0) parts.push(`${cacheStats.counts.pending} pending`);
+                    if (cacheStats.counts.approved > 0) parts.push(`${cacheStats.counts.approved} approved`);
+                    if (cacheStats.counts.rejected > 0) parts.push(`${cacheStats.counts.rejected} rejected`);
+                    
+                    statusText.innerHTML = `
+                        ${parts.join(', ')} • ${cacheStats.sizes.totalMB} MB used
+                        ${cacheStats.counts.pending > 0 ? '<br><strong>Ready for validation!</strong>' : ''}
+                    `;
+                    
+                    // Update validator button
+                    if (cacheStats.counts.pending > 0) {
+                        validatorBtn.innerHTML = `🔍 Invoice Validator (${cacheStats.counts.pending} pending)`;
+                        validatorBtn.classList.add('btn-warning');
+                        validatorBtn.classList.remove('btn-primary');
+                    } else {
+                        validatorBtn.innerHTML = `🔍 Invoice Validator`;
+                        validatorBtn.classList.add('btn-primary');
+                        validatorBtn.classList.remove('btn-warning');
+                    }
+                    
+                    // Update header
+                    const header = document.querySelector('.header p');
+                    header.innerHTML = `
+                        Zero-cost, frontend-only PDF invoice data extraction to Excel<br>
+                        <span style="color: #059669; font-weight: 500;">📋 ${cacheStats.counts.total} invoices in cache (${cacheStats.counts.pending} pending validation)</span>
+                    `;
+                } else {
+                    // Hide cache panel if no invoices
+                    statusPanel.style.display = 'none';
+                    validatorBtn.innerHTML = `🔍 Invoice Validator`;
+                    validatorBtn.classList.add('btn-primary');
+                    validatorBtn.classList.remove('btn-warning');
+                }
+                
+            } catch (error) {
+                console.log('⚠️ Cache stats not available (normal on first load)');
+            }
+        }
+        
+        function setupFileUpload() {
+            const uploadZone = document.getElementById('uploadZone');
+            const fileInput = document.getElementById('fileInput');
+            
+            // Click to browse
+            uploadZone.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            // File input change
+            fileInput.addEventListener('change', (e) => {
+                handleFiles(e.target.files);
+            });
+            
+            // Drag and drop
+            uploadZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadZone.classList.add('dragover');
+            });
+            
+            uploadZone.addEventListener('dragleave', () => {
+                uploadZone.classList.remove('dragover');
+            });
+            
+            uploadZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadZone.classList.remove('dragover');
+                handleFiles(e.dataTransfer.files);
+            });
+        }
+        
+        function setupEventListeners() {
+            // Process button
+            document.getElementById('processBtn').addEventListener('click', processAllFiles);
+            
+        }
+        
+        function handleFiles(files) {
+            const fileArray = Array.from(files);
+            const pdfFiles = fileArray.filter(file => file.type === 'application/pdf');
+            
+            if (pdfFiles.length === 0) {
+                alert('Please select only PDF files.');
+                return;
+            }
+            
+            // Add files to upload list
+            pdfFiles.forEach(file => {
+                const fileId = Date.now() + Math.random();
+                uploadedFiles.push({
+                    id: fileId,
+                    file: file,
+                    name: file.name,
+                    size: file.size,
+                    status: 'pending'
+                });
+            });
+            
+            updateFileList();
+            updateProcessButton();
+        }
+        
+        function updateFileList() {
+            const fileList = document.getElementById('fileList');
+            
+            if (uploadedFiles.length === 0) {
+                fileList.innerHTML = '';
+                return;
+            }
+            
+            fileList.innerHTML = uploadedFiles.map(file => `
+                <div class="file-item" data-file-id="${file.id}">
+                    <div class="file-info">
+                        <span class="file-name">${file.name}</span>
+                        <span class="file-size">${formatFileSize(file.size)}</span>
+                        <span class="file-status status-${file.status}">${file.status}</span>
+                    </div>
+                    <button class="remove-btn" onclick="removeFile(${file.id})">Remove</button>
+                </div>
+            `).join('');
+        }
+        
+        function removeFile(fileId) {
+            uploadedFiles = uploadedFiles.filter(file => file.id !== fileId);
+            updateFileList();
+            updateProcessButton();
+        }
+        
+        function updateProcessButton() {
+            const processBtn = document.getElementById('processBtn');
+            const pendingFiles = uploadedFiles.filter(file => file.status === 'pending');
+            
+            processBtn.disabled = pendingFiles.length === 0;
+            processBtn.textContent = pendingFiles.length > 0 
+                ? `🔄 Process ${pendingFiles.length} Files` 
+                : '🔄 Process Invoices';
+        }
+        
+        async function processAllFiles() {
+            const pendingFiles = uploadedFiles.filter(file => file.status === 'pending');
+            
+            if (pendingFiles.length === 0) {
+                alert('No files to process.');
+                return;
+            }
+            
+            // Show progress
+            const progressContainer = document.getElementById('progressContainer');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            
+            progressContainer.style.display = 'block';
+            progressFill.style.width = '0%';
+            progressText.textContent = 'Starting processing...';
+            
+            try {
+                for (let i = 0; i < pendingFiles.length; i++) {
+                    const file = pendingFiles[i];
+                    const progress = ((i + 1) / pendingFiles.length) * 100;
+                    
+                    // Update progress
+                    progressFill.style.width = progress + '%';
+                    progressText.textContent = `Processing ${file.name} (${i + 1}/${pendingFiles.length})`;
+                    
+                    // Update file status
+                    file.status = 'processing';
+                    updateFileList();
+                    
+                    try {
+                        const result = await processFile(file);
+                        file.status = 'success';
+                        file.extractedData = result;
+                        
+                        // Check for duplicate invoices before adding
+                        await handleDuplicateInvoices(result, file.name);
+                        
+                        // Add to cache for validation workflow
+                        console.log('📝 Adding invoices to cache for validation...');
+                        let addedCount = 0;
+                        
+                        // Group by invoice number to add unique invoices to pending
+                        const invoiceGroups = {};
+                        result.forEach(item => {
+                            if (item.invoiceNumber && !invoiceGroups[item.invoiceNumber]) {
+                                invoiceGroups[item.invoiceNumber] = result.filter(r => 
+                                    r.invoiceNumber === item.invoiceNumber
+                                );
+                            }
+                        });
+                        
+                        // Add each unique invoice to pending cache
+                        Object.values(invoiceGroups).forEach(invoiceData => {
+                            // invoiceData is an array of line items
+                            // Use the first item as the main invoice data structure
+                            const mainInvoiceData = { ...invoiceData[0] };
+                            
+                            // Remove any existing fullInvoiceData to avoid nesting
+                            delete mainInvoiceData.fullInvoiceData;
+                            
+                            // Create proper invoice entry
+                            const invoiceEntry = {
+                                ...mainInvoiceData,
+                                fullInvoiceData: invoiceData // Complete array for processing
+                            };
+                            
+                            if (addPendingInvoice(invoiceEntry)) {
+                                addedCount++;
+                                console.log('📝 Added to pending cache:', invoiceData[0].invoiceNumber);
+                            }
+                        });
+                        
+                        console.log(`✅ Cache update completed: ${addedCount} invoices added to pending validation`);
+                        
+                    } catch (error) {
+                        console.error('Error processing file:', file.name, error);
+                        file.status = 'error';
+                        file.error = error.message;
+                    }
+                    
+                    updateFileList();
+                    
+                    // Small delay to show progress
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                
+                // Hide progress
+                progressContainer.style.display = 'none';
+                
+                // Show data review
+                updateDataReview();
+                
+                // Update buttons
+                updateProcessButton();
+                
+                // Refresh cache status display
+                displayCacheStatus();
+                
+                // Show user feedback about cache
+                const cacheStats = getCacheStats();
+                if (cacheStats.counts.pending > 0) {
+                    console.log(`✅ Processing complete! ${cacheStats.counts.pending} invoices are now pending validation.`);
+                }
+                
+                console.log('✅ All files processed successfully!', extractedData);
+                
+            } catch (error) {
+                console.error('Error during processing:', error);
+                progressContainer.style.display = 'none';
+                alert('An error occurred during processing. Please try again.');
+            }
+        }
+        
+        async function processFile(fileData) {
+            const file = fileData.file;
+            
+            try {
+                // Use the PDF extractor module
+                const invoiceData = await extractDataFromPDF(file);
+                return invoiceData;
+                
+            } catch (error) {
+                logError('Error processing file:', error);
+                throw new Error(`Failed to process PDF: ${error.message}`);
+            }
+        }
+        
+        async function handleDuplicateInvoices(newResults, fileName) {
+            // Group new results by invoice number
+            const newInvoices = {};
+            newResults.forEach(item => {
+                const invoiceNumber = item.invoiceNumber;
+                if (invoiceNumber) {
+                    if (!newInvoices[invoiceNumber]) {
+                        newInvoices[invoiceNumber] = [];
+                    }
+                    newInvoices[invoiceNumber].push(item);
+                }
+            });
+            
+            // Check each unique invoice for duplicates
+            for (const [invoiceNumber, invoiceItems] of Object.entries(newInvoices)) {
+                // Check if this invoice already exists in extractedData
+                const existingInvoice = extractedData.find(item => item.invoiceNumber === invoiceNumber);
+                
+                if (existingInvoice) {
+                    // Found duplicate - show user dialog
+                    const userChoice = await showDuplicateInvoiceDialog(invoiceNumber, fileName, existingInvoice.fileName);
+                    
+                    if (userChoice === 'skip') {
+                        console.log(`⏭️ Skipping duplicate invoice ${invoiceNumber} from ${fileName}`);
+                        continue; // Skip this invoice
+                    } else if (userChoice === 'replace') {
+                        console.log(`🔄 Replacing invoice ${invoiceNumber} - removing old data from ${existingInvoice.fileName}`);
+                        // Remove all existing data for this invoice number
+                        extractedData = extractedData.filter(item => item.invoiceNumber !== invoiceNumber);
+                    }
+                }
+                
+                // Correct credit note amounts if needed
+                const correctedInvoiceItems = correctCreditNoteAmounts(invoiceItems);
+                
+                // Add the new invoice data (either first time or replacement)
+                extractedData.push(...correctedInvoiceItems);
+            }
+        }
+        
+        function correctCreditNoteAmounts(invoiceItems) {
+            if (!invoiceItems || invoiceItems.length === 0) return invoiceItems;
+            
+            // Check if this is a credit note by examining the first item
+            const firstItem = invoiceItems[0];
+            const isCreditNote = firstItem.creditNote;
+            
+            if (!isCreditNote) {
+                return invoiceItems; // Not a credit note, return unchanged
+            }
+            
+            console.log('🔍 Checking credit note for amount correction:', firstItem.invoiceNumber);
+            
+            // Check if ALL line items have positive amounts
+            const allPositive = invoiceItems.every(item => {
+                const amount = item.positionTotal || 0;
+                return amount > 0;
+            });
+            
+            if (allPositive) {
+                console.log('🔄 Credit note with all positive amounts detected. Converting to negative amounts.');
+                
+                // Make all amounts negative and mark as corrected
+                return invoiceItems.map(item => ({
+                    ...item,
+                    positionTotal: -(Math.abs(item.positionTotal || 0)),
+                    unitPrice: -(Math.abs(item.unitPrice || 0)),
+                    extractedInvoiceTotal: -(Math.abs(item.extractedInvoiceTotal || 0)), // Also fix the invoice total
+                    isCreditNoteCorrected: true // Flag to identify corrected items for styling
+                }));
+            } else {
+                console.log('✅ Credit note already has mixed positive/negative amounts. No correction needed.');
+                return invoiceItems; // Already has negative amounts, no correction needed
+            }
+        }
+
+        function showDuplicateInvoiceDialog(invoiceNumber, newFileName, existingFileName) {
+            return new Promise((resolve) => {
+                // Create modal dialog
+                const modal = document.createElement('div');
+                modal.className = 'modal';
+                modal.style.display = 'flex';
+                modal.innerHTML = `
+                    <div class="modal-content" style="max-width: 500px;">
+                        <div class="modal-header">
+                            <h3 class="modal-title">🔄 Duplicate Invoice Detected</h3>
+                        </div>
+                        <div style="padding: 1rem 0;">
+                            <p><strong>Invoice ${invoiceNumber}</strong> in file <strong>${newFileName}</strong> has already been processed from file <strong>${existingFileName}</strong>.</p>
+                            <p>What would you like to do?</p>
+                        </div>
+                        <div style="display: flex; gap: 1rem; justify-content: center; padding-top: 1rem;">
+                            <button class="btn btn-primary" id="skipBtn">⏭️ Skip</button>
+                            <button class="btn btn-warning" id="replaceBtn">🔄 Replace</button>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(modal);
+                
+                // Handle button clicks
+                document.getElementById('skipBtn').onclick = () => {
+                    document.body.removeChild(modal);
+                    resolve('skip');
+                };
+                
+                document.getElementById('replaceBtn').onclick = () => {
+                    document.body.removeChild(modal);
+                    resolve('replace');
+                };
+                
+                // Close on background click
+                modal.onclick = (e) => {
+                    if (e.target === modal) {
+                        document.body.removeChild(modal);
+                        resolve('skip'); // Default to skip
+                    }
+                };
+            });
+        }
+            
+        function updateDataReview() {
+            const dataReviewCard = document.getElementById('dataReviewCard');
+            const dataTableBody = document.getElementById('dataTableBody');
+            const validationSummary = document.getElementById('validationSummary');
+            
+            if (extractedData.length === 0) {
+                dataReviewCard.style.display = 'none';
+                return;
+            }
+            
+            // Show the card
+            dataReviewCard.style.display = 'block';
+            
+            // Generate validation summary
+            const summary = generateValidationSummary(extractedData);
+            validationSummary.innerHTML = summary;
+            
+            // Restructure data hierarchically
+            const hierarchicalData = restructureDataHierarchically(extractedData);
+            
+            // Generate hierarchical table
+            dataTableBody.innerHTML = generateHierarchicalTable(hierarchicalData);
+            
+            // Add event listeners for editable fields
+            setupEditableFields();
+            
+            // Add expand/collapse functionality
+            setupExpandCollapse();
+            
+            // Run validation after data review is updated
+            setTimeout(() => validateInvoiceTotals(), 100);
+        }
+        
+        function restructureDataHierarchically(data) {
+            const invoices = {};
+            
+            // Group by invoice
+            data.forEach(row => {
+                const invoiceKey = row.invoiceNumber || 'unknown';
+                
+                if (!invoices[invoiceKey]) {
+                    invoices[invoiceKey] = {
+                        // Invoice-level data
+                        fileName: row.fileName,
+                        projectId: row.projectId,
+                        customerId: row.customerId,
+                        invoiceNumber: row.invoiceNumber,
+                        dateOfInvoice: row.dateOfInvoice,
+                        monthOfInvoice: row.monthOfInvoice,
+                        currency: row.currency,
+                        vat: row.vat,
+                        creditNote: row.creditNote,
+                        
+                        // Service periods within this invoice
+                        servicePeriods: {},
+                        totalAmount: 0,
+                        lineItemCount: 0,
+                        extractedInvoiceTotal: row.extractedInvoiceTotal
+                    };
+                }
+                
+                const invoice = invoices[invoiceKey];
+                const periodKey = row.serviceProvisionPeriod || 'Unknown Period';
+                
+                // Initialize service period if not exists
+                if (!invoice.servicePeriods[periodKey]) {
+                    invoice.servicePeriods[periodKey] = {
+                        period: row.serviceProvisionPeriod,
+                        lineItems: [],
+                        subtotal: 0,
+                        internalSubtotal: 0,
+                        externalSubtotal: 0
+                    };
+                }
+                
+                // Add line item to service period
+                if (row.positionDescription) {
+                    const lineItem = {
+                        position: row.position,
+                        material: row.material,
+                        typeCost: row.typeCost,
+                        positionDescription: row.positionDescription,
+                        positionQuantity: row.positionQuantity,
+                        positionTotal: row.positionTotal || 0,
+                        unit: row.unit,
+                        vat: row.vat,
+                        unitPrice: row.unitPrice
+                    };
+                    
+                    invoice.servicePeriods[periodKey].lineItems.push(lineItem);
+                    invoice.servicePeriods[periodKey].subtotal += lineItem.positionTotal;
+                    
+                    if (lineItem.typeCost === 'Internal') {
+                        invoice.servicePeriods[periodKey].internalSubtotal += lineItem.positionTotal;
+                    } else {
+                        invoice.servicePeriods[periodKey].externalSubtotal += lineItem.positionTotal;
+                    }
+                    
+                    invoice.totalAmount += lineItem.positionTotal;
+                    invoice.lineItemCount++;
+                }
+            });
+            
+            return invoices;
+        }
+        
+        function generateHierarchicalTable(invoices) {
+            let html = '';
+            
+            Object.values(invoices).forEach((invoice, invoiceIndex) => {
+                // Invoice Header Row
+                const invoiceTotal = invoice.totalAmount;
+                const creditNoteClass = invoice.creditNote ? 'mismatch-row' : '';
+                
+                html += `
+                    <tr class="invoice-header ${creditNoteClass}" data-invoice="${invoice.invoiceNumber}">
+                        <td colspan="13">
+                            <div style="display: flex; align-items: center; gap: 1rem;">
+                                <button class="expand-btn" onclick="toggleInvoice('${invoice.invoiceNumber}')" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">▼</button>
+                                <strong> Invoice ${invoice.invoiceNumber}</strong>
+                                <span class="file-status ${invoice.creditNote ? 'status-warning' : 'status-success'}">${invoice.creditNote ? 'Credit Note' : 'Invoice'}</span>
+                                <span> Total: ${formatCurrency(invoiceTotal)}</span>
+                                <span> ${invoice.fileName}</span>
+                                <span> Project: ${invoice.projectId}</span>
+                                <span> Customer: ${invoice.customerId}</span>
+                                <span> ${invoice.dateOfInvoice} (${invoice.monthOfInvoice})</span>
+                                <span> ${invoice.lineItemCount} line items</span>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                
+                // Service Period Rows
+                Object.values(invoice.servicePeriods).forEach((period, periodIndex) => {
+                    const periodKey = `${invoice.invoiceNumber}_${period.period}`;
+                    const cssClass = periodKey.replace(/[^a-zA-Z0-9_-]/g, '_'); // CSS-safe class name
+                    
+                    html += `
+                        <tr class="service-period-header invoice-${invoice.invoiceNumber}" style="display: none;" data-period="${periodKey}">
+                            <td style="padding-left: 2rem;" colspan="13">
+                                <div style="display: flex; align-items: center; gap: 1rem;">
+                                    <button class="expand-btn" onclick="toggleServicePeriod('${periodKey}')" style="background: none; border: none; font-size: 1rem; cursor: pointer;">▼</button>
+                                    <strong> Service Period: ${period.period}</strong>
+                                    <span> Subtotal: ${formatCurrency(period.subtotal)}</span>
+                                    <span> Internal: ${formatCurrency(period.internalSubtotal)}</span>
+                                    <span> External: ${formatCurrency(period.externalSubtotal)}</span>
+                                    <button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; margin-left: 1rem;" onclick="addLineItem('${invoice.invoiceNumber}', '${period.period}')">+ Add Line Item</button>
+                                    <span> ${period.lineItems.length} items</span>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                    
+                    // Line Item Rows
+                    period.lineItems.forEach((item, itemIndex) => {
+                        // Only apply baby blue to individual negative amounts (as was originally working)
+                        const itemClass = item.positionTotal < 0 ? 'mismatch-row' : '';
+                        const statusClass = item.positionTotal < 0 ? 'status-warning' : 'status-success';
+                        const statusText = item.positionTotal < 0 ? 'Credit' : 'Debit';
+                        
+                        html += `
+                            <tr class="line-item period-${cssClass} invoice-${invoice.invoiceNumber}" style="display: none;" data-invoice-number="${invoice.invoiceNumber}" data-position="${item.position}">
+                                <td style="padding-left: 4rem;">${item.position}</td>
+                                <td>${item.material}</td>
+                                <td>${item.typeCost}</td>
+                                <td style="max-width: 200px; word-wrap: break-word;">${item.positionDescription}</td>
+                                <td>${item.positionQuantity}</td>
+                                <td>${item.unit || ''}</td>
+                                <td>${item.vat || ''}</td>
+                                <td>${formatCurrency(item.unitPrice)}</td>
+                                <td class="${itemClass}">${formatCurrency(item.positionTotal)}</td>
+                                <td><span class="file-status ${statusClass}">${statusText}</span></td>
+                                <td colspan="3">
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="editLineItem('${invoice.invoiceNumber}', '${period.period}', '${item.position}', '${item.material}')">Edit</button>
+                                        <button class="remove-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="removeLineItem('${invoice.invoiceNumber}', '${period.period}', '${item.position}', '${item.material}')">Remove</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                });
+            });
+            
+            return html;
+        }
+        
+        function setupExpandCollapse() {
+            // All invoices start collapsed by default
+            // Add global expand/collapse buttons
+            const dataReviewCard = document.getElementById('dataReviewCard');
+            
+            if (!document.getElementById('globalControls')) {
+                const controlsHtml = `
+                    <div id="globalControls" style="margin-bottom: 1rem; display: flex; gap: 1rem;">
+                        <button class="btn" onclick="expandAllInvoices()">📂 Expand All Invoices</button>
+                        <button class="btn" onclick="collapseAllInvoices()">📁 Collapse All</button>
+                        <button class="btn" onclick="expandAllServicePeriods()">📅 Expand All Periods</button>
+                        <button class="btn btn-success" onclick="openFieldSelection()">📊 Configure & Export to Excel</button>
+                    </div>
+                `;
+                
+                dataReviewCard.querySelector('p').insertAdjacentHTML('afterend', controlsHtml);
+            }
+        }
+        
+        function toggleInvoice(invoiceNumber) {
+            const rows = document.querySelectorAll(`.invoice-${invoiceNumber}`);
+            const button = document.querySelector(`[data-invoice="${invoiceNumber}"] .expand-btn`);
+            
+            const isExpanded = rows[0]?.style.display !== 'none';
+            
+            rows.forEach(row => {
+                row.style.display = isExpanded ? 'none' : '';
+            });
+            
+            button.textContent = isExpanded ? '▶' : '▼';
+        }
+              
+        function toggleServicePeriod(periodKey) {
+            const cssClass = makeCSSClass(periodKey);
+            const rows = document.querySelectorAll(`.period-${cssClass}`);
+            const button = document.querySelector(`[data-period="${periodKey}"] .expand-btn`);
+            
+            const isExpanded = rows[0]?.style.display !== 'none';
+            
+            rows.forEach(row => {
+                row.style.display = isExpanded ? 'none' : '';
+            });
+            
+            button.textContent = isExpanded ? '▶' : '▼';
+        }
+        
+        function expandAllInvoices() {
+            document.querySelectorAll('.service-period-header').forEach(row => {
+                row.style.display = '';
+            });
+            document.querySelectorAll('[data-invoice] .expand-btn').forEach(btn => {
+                btn.textContent = '▼';
+            });
+        }
+        
+        function collapseAllInvoices() {
+            document.querySelectorAll('.service-period-header, .line-item').forEach(row => {
+                row.style.display = 'none';
+            });
+            document.querySelectorAll('.expand-btn').forEach(btn => {
+                btn.textContent = '▶';
+            });
+        }
+        
+        function expandAllServicePeriods() {
+            document.querySelectorAll('.line-item').forEach(row => {
+                row.style.display = '';
+            });
+            document.querySelectorAll('[data-period] .expand-btn').forEach(btn => {
+                btn.textContent = '▼';
+            });
+        }        
+        
+        function setupEditableFields() {
+            // Event listeners for inline editing will be added here
+            // For now, using the button-based editing approach
+        }
+        
+        function generateValidationSummary(data) {
+            const totalInvoices = new Set(data.map(row => row.invoiceNumber)).size;
+            const totalLineItems = data.length;
+            const creditNotes = data.filter(row => row.creditNote).length;
+            const negativeAmounts = data.filter(row => row.positionTotal < 0).length;
+            
+            return `
+                <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+                    <div><strong>Total Invoices:</strong> ${totalInvoices}</div>
+                    <div><strong>Line Items:</strong> ${totalLineItems}</div>
+                    <div><strong>Credit Notes:</strong> ${creditNotes}</div>
+                    <div><strong>Negative Amounts:</strong> ${negativeAmounts}</div>
+                </div>
+            `;
+        }           
+               
+        // ===== EDIT AND REMOVE FUNCTIONALITY =====
+        
+        function editLineItem(invoiceNumber, period, position, material) {
+            // Find the specific line item in extracted data
+            const lineItem = extractedData.find(item => 
+                item.invoiceNumber === invoiceNumber && 
+                item.serviceProvisionPeriod === period &&
+                item.position === position &&
+                item.material === material &&
+                item.positionDescription // Only actual line items
+            );
+            
+            if (!lineItem) {
+                alert('Line item not found!');
+                return;
+            }
+            
+            currentEditingItem = { invoiceNumber, period, position, material, data: lineItem };
+            
+            // Populate edit form
+            const editForm = document.getElementById('editForm');
+            editForm.innerHTML = `
+                <div class="form-group">
+                    <label>Position</label>
+                    <input type="text" id="editPosition" value="${lineItem.position || ''}">
+                </div>
+                <div class="form-group">
+                    <label>Material Code</label>
+                    <input type="text" id="editMaterial" value="${lineItem.material || ''}">
+                </div>
+                <div class="form-group">
+                    <label>Cost Type</label>
+                    <select id="editCostType">
+                        <option value="Internal" ${lineItem.typeCost === 'Internal' ? 'selected' : ''}>Internal</option>
+                        <option value="External" ${lineItem.typeCost === 'External' ? 'selected' : ''}>External</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Quantity</label>
+                    <input type="number" id="editQuantity" value="${lineItem.positionQuantity || 1}" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>Unit</label>
+                    <input type="text" id="editUnit" value="${lineItem.unit || ''}">
+                </div>
+                <div class="form-group">
+                    <label>Unit Price</label>
+                    <input type="number" id="editUnitPrice" value="${lineItem.unitPrice || 0}" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>Total Amount</label>
+                    <input type="number" id="editTotal" value="${lineItem.positionTotal || 0}" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>VAT</label>
+                    <input type="text" id="editVat" value="${lineItem.vat || ''}">
+                </div>
+                <div class="form-group full-width">
+                    <label>Description</label>
+                    <textarea id="editDescription">${lineItem.positionDescription || ''}</textarea>
+                </div>
+            `;
+            
+            // Show modal
+            document.getElementById('editItemModal').style.display = 'flex';
+        }
+        
+        function closeEditModal() {
+            document.getElementById('editItemModal').style.display = 'none';
+            currentEditingItem = null;
+        }
+        
+        function saveLineItemEdit() {
+            if (!currentEditingItem) return;
+            
+            // Get form values
+            const updatedData = {
+                position: document.getElementById('editPosition').value,
+                material: document.getElementById('editMaterial').value,
+                typeCost: document.getElementById('editCostType').value,
+                positionQuantity: parseFloat(document.getElementById('editQuantity').value) || 1,
+                unit: document.getElementById('editUnit').value,
+                unitPrice: parseFloat(document.getElementById('editUnitPrice').value) || 0,
+                positionTotal: parseFloat(document.getElementById('editTotal').value) || 0,
+                vat: document.getElementById('editVat').value,
+                positionDescription: document.getElementById('editDescription').value
+            };
+            
+            // Update the data in extractedData
+            const lineItem = currentEditingItem.data;
+            Object.assign(lineItem, updatedData);
+            
+            // Refresh the display
+            updateDataReview();
+            
+            // Re-validate totals after editing line item
+            validateInvoiceTotals();
+            
+            // Restore expanded state to show the edited item
+            restoreExpandedStateAfterEdit();
+            
+            // Close modal
+            closeEditModal();
+            
+            console.log('✅ Line item updated:', updatedData);
+        }
+        
+        function removeLineItem(invoiceNumber, period, position, material) {
+            if (!confirm('Are you sure you want to remove this line item?')) {
+                return;
+            }
+            
+            // Find and remove the specific line item from extracted data
+            const itemIndex = extractedData.findIndex(item => 
+                item.invoiceNumber === invoiceNumber && 
+                item.serviceProvisionPeriod === period &&
+                item.position === position &&
+                item.material === material &&
+                item.positionDescription // Only actual line items
+            );
+            
+            if (itemIndex >= 0) {
+                const removedItem = extractedData[itemIndex];
+                extractedData.splice(itemIndex, 1);
+                updateDataReview();
+                
+                // Re-validate totals after removing line item
+                validateInvoiceTotals();
+                
+                // Restore expanded state to show where item was removed
+                restoreExpandedStateAfterRemove(invoiceNumber, period);
+                
+                console.log('✅ Line item removed:', removedItem.positionDescription);
+            } else {
+                alert('Line item not found!');
+            }
+        }
+        
+        function addLineItem(invoiceNumber, period) {
+            console.log('🔧 Adding line item for invoice:', invoiceNumber, 'period:', `"${period}"`);
+            
+            // Normalize period string (trim whitespace)
+            const normalizedPeriod = period.trim();
+            
+            // Generate unique position number for the new line item
+            const existingItems = extractedData.filter(item => 
+                item.invoiceNumber === invoiceNumber && 
+                item.serviceProvisionPeriod && item.serviceProvisionPeriod.trim() === normalizedPeriod
+            );
+            
+            console.log('📊 Existing items found:', existingItems.length);
+            
+            // Find the highest position number and increment
+            const maxPosition = Math.max(...existingItems.map(item => parseInt(item.position) || 0), 0);
+            const newPosition = String(maxPosition + 10).padStart(4, '0');
+            
+            // Find existing item from same invoice to copy all fields
+            const templateItem = extractedData.find(item => item.invoiceNumber === invoiceNumber);
+            if (!templateItem) {
+                console.error('❌ No existing items found for invoice:', invoiceNumber);
+                return;
+            }
+            
+            // Create new line item copying all fields from template
+            const newLineItem = {
+                ...templateItem, // Copy all fields
+                serviceProvisionPeriod: normalizedPeriod, // Use the normalized period
+                position: newPosition,
+                material: '999999',
+                positionDescription: 'New Line Item',
+                positionQuantity: 1,
+                unit: 'H',
+                unitPrice: 0,
+                positionTotal: 0,
+                typeCost: 'Internal'
+            };
+            
+            console.log('🔧 New line item serviceProvisionPeriod:', `"${normalizedPeriod}"`);
+            console.log('🔧 Template item serviceProvisionPeriod:', `"${templateItem.serviceProvisionPeriod}"`);
+            console.log('🔧 All periods in invoice:', extractedData
+                .filter(item => item.invoiceNumber === invoiceNumber)
+                .map(item => `"${item.serviceProvisionPeriod}"`)
+                .filter((value, index, self) => self.indexOf(value) === index)
+            );
+            
+            // Show detailed comparison
+            const allInvoiceItems = extractedData.filter(item => item.invoiceNumber === invoiceNumber);
+            console.log('🔧 Detailed period comparison:');
+            allInvoiceItems.forEach((item, idx) => {
+                const matches = item.serviceProvisionPeriod && item.serviceProvisionPeriod.trim() === normalizedPeriod;
+                console.log(`  ${idx}: "${item.serviceProvisionPeriod}" === "${normalizedPeriod}" ? ${matches}`);
+            });
+            
+            // Add to extracted data
+            extractedData.push(newLineItem);
+            
+            // Re-process and update display
+            updateDataReview();
+            
+            // Re-validate totals after adding line item
+            validateInvoiceTotals();
+            
+            // Automatically edit the new line item
+            editLineItem(invoiceNumber, period, newPosition, '999999');
+        }
+
+        function toggleInvoice(invoiceNumber) {
+            const rows = document.querySelectorAll(`.invoice-${invoiceNumber}`);
+            const button = document.querySelector(`[data-invoice="${invoiceNumber}"] .expand-btn`);
+            
+            const isExpanded = rows[0]?.style.display !== 'none';
+            
+            rows.forEach(row => {
+                row.style.display = isExpanded ? 'none' : '';
+            });
+            
+            button.textContent = isExpanded ? '▶' : '▼';
+        }
+
+        function toggleServicePeriod(periodKey) {
+            const cssClass = makeCSSClass(periodKey);
+            const rows = document.querySelectorAll(`.period-${cssClass}`);
+            const button = document.querySelector(`[data-period="${periodKey}"] .expand-btn`);
+            
+            const isExpanded = rows[0]?.style.display !== 'none';
+            
+            rows.forEach(row => {
+                row.style.display = isExpanded ? 'none' : '';
+            });
+            
+            button.textContent = isExpanded ? '▶' : '▼';
+        }
+
+        function expandAllInvoices() {
+            document.querySelectorAll('.service-period-header').forEach(row => {
+                row.style.display = '';
+            });
+            document.querySelectorAll('[data-invoice] .expand-btn').forEach(btn => {
+                btn.textContent = '▼';
+            });
+        }
+
+        function collapseAllInvoices() {
+            document.querySelectorAll('.service-period-header, .line-item').forEach(row => {
+                row.style.display = 'none';
+            });
+            document.querySelectorAll('.expand-btn').forEach(btn => {
+                btn.textContent = '▶';
+            });
+        }
+
+        function expandAllServicePeriods() {
+            document.querySelectorAll('.line-item').forEach(row => {
+                row.style.display = '';
+            });
+            document.querySelectorAll('[data-period] .expand-btn').forEach(btn => {
+                btn.textContent = '▼';
+            });
+        }
+
+        function validateInvoiceTotals() {
+            console.log('🔍 validateInvoiceTotals called');
+            
+            if (!extractedData || extractedData.length === 0) {
+                console.log('❌ No extracted data available for validation');
+                return;
+            }
+            
+            // Group data by invoice for validation
+            const invoiceGroups = {};
+            extractedData.forEach(row => {
+                const invoiceKey = row.invoiceNumber || 'unknown';
+                if (!invoiceGroups[invoiceKey]) {
+                    invoiceGroups[invoiceKey] = {
+                        invoiceNumber: row.invoiceNumber,
+                        extractedInvoiceTotal: row.extractedInvoiceTotal,
+                        lineItems: []
+                    };
+                }
+                if (row.positionDescription) { // Only count actual line items
+                    invoiceGroups[invoiceKey].lineItems.push(row);
+                }
+            });
+            
+            // Validate each invoice
+            document.querySelectorAll('.invoice-header').forEach(row => {
+                const invoiceNumberElement = row.querySelector('strong');
+                if (!invoiceNumberElement) {
+                    console.log('❌ No invoice number element found in row');
+                    return;
+                }
+                // Extract just the number from "📋 Invoice 9120001474"
+                const invoiceText = invoiceNumberElement.textContent.trim();
+                const invoiceNumber = invoiceText.replace(/^📋\s*(Invoice|Credit Note)\s*/, '').trim();
+                
+                console.log(`🔍 Validating invoice: "${invoiceNumber}"`);
+                console.log(`🔍 Available invoices in data:`, Object.keys(invoiceGroups));
+                
+                const invoiceGroup = invoiceGroups[invoiceNumber];
+                if (!invoiceGroup) {
+                    console.log(`❌ No data found for invoice: ${invoiceNumber}`);
+                    return;
+                }
+                
+                // Calculate sum of all line item positions
+                let calculatedTotal = 0;
+                invoiceGroup.lineItems.forEach(item => {
+                    const amount = parseFloat(item.positionTotal) || 0;
+                    calculatedTotal += amount;
+                    console.log(`📊 Line item: ${item.positionDescription} = ${amount}`);
+                });
+                
+                const extractedTotal = parseFloat(invoiceGroup.extractedInvoiceTotal) || 0;
+                
+                console.log(`💰 Invoice ${invoiceNumber}: Extracted total = ${extractedTotal}, Calculated total = ${calculatedTotal}`);
+                
+                // Check for mismatch (allowing for rounding errors)
+                const hasValidationError = Math.abs(extractedTotal - calculatedTotal) > 0.01;
+                
+                if (hasValidationError) {
+                    // Mark ONLY invoice header as error
+                    row.classList.add('validation-error');
+                    row.title = `Validation Error: Invoice total ${formatCurrency(extractedTotal)} ≠ Sum of positions ${formatCurrency(calculatedTotal)}`;
+                    
+                    console.log(`❌ Validation FAILED for invoice ${invoiceNumber}: ${extractedTotal} ≠ ${calculatedTotal}`);
+                    console.log(`🔴 Added validation-error class to invoice header only`);
+                } else {
+                    // Remove error styling from invoice header
+                    row.classList.remove('validation-error');
+                    row.title = `Validation OK: Invoice total matches sum of positions`;
+                    
+                    console.log(`✅ Validation PASSED for invoice ${invoiceNumber}: ${extractedTotal} = ${calculatedTotal}`);
+                }
+            });
+        }
+
+        function setupEditableFields() {
+            // Event listeners for inline editing will be added here
+            // For now, using the button-based editing approach
+        }
+
+        function generateValidationSummary(data) {
+            const totalInvoices = new Set(data.map(row => row.invoiceNumber)).size;
+            const totalLineItems = data.length;
+            const creditNotes = data.filter(row => row.creditNote).length;
+            const negativeAmounts = data.filter(row => row.positionTotal < 0).length;
+            
+            return `
+                <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+                    <div><strong>Total Invoices:</strong> ${totalInvoices}</div>
+                    <div><strong>Line Items:</strong> ${totalLineItems}</div>
+                    <div><strong>Credit Notes:</strong> ${creditNotes}</div>
+                    <div><strong>Negative Amounts:</strong> ${negativeAmounts}</div>
+                </div>
+            `;
+        }
+
+        function restoreExpandedStateAfterEdit() {
+            if (!currentEditingItem) return;
+            
+            const { invoiceNumber, period } = currentEditingItem;
+            
+            // Small delay to let the DOM update
+            setTimeout(() => {
+                // Expand the invoice
+                const invoiceRows = document.querySelectorAll(`.invoice-${invoiceNumber}`);
+                const invoiceButton = document.querySelector(`[data-invoice="${invoiceNumber}"] .expand-btn`);
+                
+                if (invoiceRows.length > 0) {
+                    invoiceRows.forEach(row => row.style.display = '');
+                    if (invoiceButton) invoiceButton.textContent = '▼';
+                }
+                
+                // Expand the service period
+                const periodKey = `${invoiceNumber}_${period}`;
+                const cssClass = periodKey.replace(/[^a-zA-Z0-9_-]/g, '_');
+                const periodRows = document.querySelectorAll(`.period-${cssClass}`);
+                const periodButton = document.querySelector(`[data-period="${periodKey}"] .expand-btn`);
+                
+                if (periodRows.length > 0) {
+                    periodRows.forEach(row => row.style.display = '');
+                    if (periodButton) periodButton.textContent = '▼';
+                }
+            }, 100);
+        }
+        
+        function restoreExpandedStateAfterRemove(invoiceNumber, period) {
+            // Small delay to let the DOM update
+            setTimeout(() => {
+                // Expand the invoice
+                const invoiceRows = document.querySelectorAll(`.invoice-${invoiceNumber}`);
+                const invoiceButton = document.querySelector(`[data-invoice="${invoiceNumber}"] .expand-btn`);
+                
+                if (invoiceRows.length > 0) {
+                    invoiceRows.forEach(row => row.style.display = '');
+                    if (invoiceButton) invoiceButton.textContent = '▼';
+                }
+                
+                // Expand the service period
+                const periodKey = `${invoiceNumber}_${period}`;
+                const cssClass = periodKey.replace(/[^a-zA-Z0-9_-]/g, '_');
+                const periodRows = document.querySelectorAll(`.period-${cssClass}`);
+                const periodButton = document.querySelector(`[data-period="${periodKey}"] .expand-btn`);
+                
+                if (periodRows.length > 0) {
+                    periodRows.forEach(row => row.style.display = '');
+                    if (periodButton) periodButton.textContent = '▼';
+                }
+            }, 100);
+        }
+        
+        // ===== FIELD SELECTION FUNCTIONALITY =====
+        
+        function openFieldSelection() {
+            if (extractedData.length === 0) {
+                alert('No data to export. Please process some files first.');
+                return;
+            }
+            
+            // Initialize field lists
+            initializeFieldLists();
+            
+            // Show modal
+            document.getElementById('fieldSelectionModal').style.display = 'flex';
+        }
+        
+        function closeFieldSelection() {
+            document.getElementById('fieldSelectionModal').style.display = 'none';
+        }
+        
+        function initializeFieldLists() {
+            // Try to load saved config first
+            const savedConfig = getSavedFieldConfig();
+            
+            if (savedConfig) {
+                selectedFieldItems = [...savedConfig];
+                updateConfigStatus('✅ Loaded saved configuration');
+            } else {
+                selectedFieldItems = [...defaultSelectedFields];
+                updateConfigStatus('Using default configuration');
+            }
+            
+            availableFieldItems = Object.keys(allFields).filter(field => !selectedFieldItems.includes(field));
+            
+            // Update UI
+            updateFieldLists();
+        }
+        
+        function updateFieldLists() {
+            const availableDiv = document.getElementById('availableFields');
+            const selectedDiv = document.getElementById('selectedFields');
+            
+            // Populate available fields
+            availableDiv.innerHTML = availableFieldItems.map(fieldKey => `
+                <div class="field-item" data-field="${fieldKey}" onclick="selectFieldItem(this, 'available')">
+                    <span class="field-name">${allFields[fieldKey].name}</span>
+                </div>
+            `).join('');
+            
+            // Populate selected fields
+            selectedDiv.innerHTML = selectedFieldItems.map(fieldKey => `
+                <div class="field-item" data-field="${fieldKey}" onclick="selectFieldItem(this, 'selected')">
+                    <span class="field-name">${allFields[fieldKey].name}</span>
+                </div>
+            `).join('');
+        }
+        
+        function selectFieldItem(element, listType) {
+            // Remove previous selections in this list
+            const list = listType === 'available' ? 'availableFields' : 'selectedFields';
+            document.querySelectorAll(`#${list} .field-item`).forEach(item => {
+                item.classList.remove('selected');
+            });
+            
+            // Select this item
+            element.classList.add('selected');
+        }
+        
+        function moveToSelected() {
+            const selected = document.querySelector('#availableFields .field-item.selected');
+            if (!selected) {
+                alert('Please select a field from the Available Fields list.');
+                return;
+            }
+            
+            const fieldKey = selected.dataset.field;
+            
+            // Move from available to selected
+            availableFieldItems = availableFieldItems.filter(f => f !== fieldKey);
+            selectedFieldItems.push(fieldKey);
+            
+            updateFieldLists();
+        }
+        
+        function moveToAvailable() {
+            const selected = document.querySelector('#selectedFields .field-item.selected');
+            if (!selected) {
+                alert('Please select a field from the Selected Fields list.');
+                return;
+            }
+            
+            const fieldKey = selected.dataset.field;
+            
+            // Move from selected to available
+            selectedFieldItems = selectedFieldItems.filter(f => f !== fieldKey);
+            availableFieldItems.push(fieldKey);
+            
+            updateFieldLists();
+        }
+        
+        function moveFieldUp() {
+            const selected = document.querySelector('#selectedFields .field-item.selected');
+            if (!selected) {
+                alert('Please select a field from the Selected Fields list.');
+                return;
+            }
+            
+            const fieldKey = selected.dataset.field;
+            const currentIndex = selectedFieldItems.indexOf(fieldKey);
+            
+            if (currentIndex > 0) {
+                // Swap with previous item
+                [selectedFieldItems[currentIndex - 1], selectedFieldItems[currentIndex]] = 
+                [selectedFieldItems[currentIndex], selectedFieldItems[currentIndex - 1]];
+                
+                updateFieldLists();
+                
+                // Re-select the moved item
+                setTimeout(() => {
+                    const newElement = document.querySelector(`#selectedFields [data-field="${fieldKey}"]`);
+                    if (newElement) newElement.classList.add('selected');
+                }, 50);
+            }
+        }
+        
+        function moveFieldDown() {
+            const selected = document.querySelector('#selectedFields .field-item.selected');
+            if (!selected) {
+                alert('Please select a field from the Selected Fields list.');
+                return;
+            }
+            
+            const fieldKey = selected.dataset.field;
+            const currentIndex = selectedFieldItems.indexOf(fieldKey);
+            
+            if (currentIndex < selectedFieldItems.length - 1) {
+                // Swap with next item
+                [selectedFieldItems[currentIndex], selectedFieldItems[currentIndex + 1]] = 
+                [selectedFieldItems[currentIndex + 1], selectedFieldItems[currentIndex]];
+                
+                updateFieldLists();
+                
+                // Re-select the moved item
+                setTimeout(() => {
+                    const newElement = document.querySelector(`#selectedFields [data-field="${fieldKey}"]`);
+                    if (newElement) newElement.classList.add('selected');
+                }, 50);
+            }
+        }
+        
+        // ===== PRESET FUNCTIONS =====
+        
+        function applyDefaultPreset() {
+            selectedFieldItems = [...defaultSelectedFields];
+            availableFieldItems = Object.keys(allFields).filter(field => !selectedFieldItems.includes(field));
+            updateFieldLists();
+        }
+        
+        function applyDetailedPreset() {
+            selectedFieldItems = [
+                'fileName', 'projectId', 'customerId', 'invoiceNumber', 'dateOfInvoice', 
+                'creditNote', 'serviceProvisionPeriod', 'position', 'material', 'typeCost',
+                'positionDescription', 'positionQuantity', 'unit', 'unitPrice', 'positionTotal'
+            ];
+            availableFieldItems = Object.keys(allFields).filter(field => !selectedFieldItems.includes(field));
+            updateFieldLists();
+        }
+        
+        function applySummaryPreset() {
+            selectedFieldItems = [
+                'fileName', 'invoiceNumber', 'dateOfInvoice', 'creditNote', 
+                'serviceProvisionPeriod', 'typeCost', 'positionTotal'
+            ];
+            availableFieldItems = Object.keys(allFields).filter(field => !selectedFieldItems.includes(field));
+            updateFieldLists();
+        }
+        
+        function selectAllFields() {
+            selectedFieldItems = Object.keys(allFields);
+            availableFieldItems = [];
+            updateFieldLists();
+        }
+        
+        function exportWithSelectedFields() {
+            if (selectedFieldItems.length === 0) {
+                alert('Please select at least one field to export.');
+                return;
+            }
+            
+            // Close modal
+            closeFieldSelection();
+            
+            // Export with selected fields using module
+            exportToExcelWithFields(extractedData, selectedFieldItems, allFields);
+        }
+        
+        // ===== CONFIG MANAGEMENT FUNCTIONS =====
+        
+        function saveFieldConfig() {
+            if (selectedFieldItems.length === 0) {
+                updateConfigStatus('❌ Cannot save empty configuration');
+                return;
+            }
+            
+            try {
+                // Save to localStorage
+                const config = {
+                    selectedFields: selectedFieldItems,
+                    savedAt: new Date().toISOString(),
+                    version: '1.0'
+                };
+                
+                localStorage.setItem('i2e-field-config', JSON.stringify(config));
+                
+                updateConfigStatus(`🍪 Configuration saved! (${selectedFieldItems.length} fields)`);
+                
+                console.log('✅ Field configuration saved:', selectedFieldItems);
+                
+            } catch (error) {
+                console.error('Error saving configuration:', error);
+                updateConfigStatus('❌ Failed to save configuration');
+            }
+        }
+        
+        function loadFieldConfig() {
+            const savedConfig = getSavedFieldConfig();
+            
+            if (!savedConfig) {
+                updateConfigStatus('❌ No saved configuration found');
+                return;
+            }
+            
+            try {
+                selectedFieldItems = [...savedConfig];
+                availableFieldItems = Object.keys(allFields).filter(field => !selectedFieldItems.includes(field));
+                
+                updateFieldLists();
+                updateConfigStatus(`✅ Configuration loaded! (${selectedFieldItems.length} fields)`);
+                
+                console.log('✅ Field configuration loaded:', selectedFieldItems);
+                
+            } catch (error) {
+                console.error('Error loading configuration:', error);
+                updateConfigStatus('❌ Failed to load configuration');
+            }
+        }
+        
+        function clearFieldConfig() {
+            if (!confirm('Are you sure you want to clear your saved configuration?')) {
+                return;
+            }
+            
+            try {
+                localStorage.removeItem('i2e-field-config');
+                
+                // Reset to default
+                selectedFieldItems = [...defaultSelectedFields];
+                availableFieldItems = Object.keys(allFields).filter(field => !selectedFieldItems.includes(field));
+                
+                updateFieldLists();
+                updateConfigStatus('🗑️ Saved configuration cleared');
+                
+                console.log('✅ Field configuration cleared');
+                
+            } catch (error) {
+                console.error('Error clearing configuration:', error);
+                updateConfigStatus('❌ Failed to clear configuration');
+            }
+        }
+        
+        function getSavedFieldConfig() {
+            try {
+                const savedData = localStorage.getItem('i2e-field-config');
+                if (!savedData) return null;
+                
+                const config = JSON.parse(savedData);
+                
+                // Validate saved config
+                if (config.selectedFields && Array.isArray(config.selectedFields)) {
+                    // Filter out any invalid field keys
+                    const validFields = config.selectedFields.filter(field => allFields.hasOwnProperty(field));
+                    return validFields.length > 0 ? validFields : null;
+                }
+                
+                return null;
+                
+            } catch (error) {
+                console.error('Error loading saved configuration:', error);
+                return null;
+            }
+        }
+        
+        function updateConfigStatus(message) {
+            const statusDiv = document.getElementById('configStatus');
+            if (statusDiv) {
+                statusDiv.textContent = message;
+                
+                // Clear status after 3 seconds
+                setTimeout(() => {
+                    if (statusDiv.textContent === message) {
+                        statusDiv.textContent = '';
+                    }
+                }, 3000);
+            }
+        }
+        
+        function getConfigInfo() {
+            const savedData = localStorage.getItem('i2e-field-config');
+            if (!savedData) return null;
+            
+            try {
+                const config = JSON.parse(savedData);
+                return {
+                    fieldCount: config.selectedFields ? config.selectedFields.length : 0,
+                    savedAt: config.savedAt ? new Date(config.savedAt).toLocaleDateString() : 'Unknown',
+                    version: config.version || '1.0'
+                };
+            } catch (error) {
+                return null;
+            }
+        }
+               
+        // ===== CACHE MANAGEMENT FUNCTIONS =====
+        
+        function exportCacheData() {
+            try {
+                const exportData = exportCacheToExcel();
+                if (exportData.length === 0) {
+                    alert('No cache data to export.');
+                    return;
+                }
+                
+                // Export using existing Excel export functionality
+                exportToExcelWithFields(exportData, Object.keys(allFields), allFields, 'I2E_Cache_Export');
+                
+                console.log(`✅ Cache exported: ${exportData.length} line items`);
+                
+            } catch (error) {
+                console.error('Error exporting cache:', error);
+                alert('Error exporting cache data. Please try again.');
+            }
+        }
+        
+        function clearCacheData() {
+            const cacheStats = getCacheStats();
+            
+            if (cacheStats.counts.total === 0) {
+                alert('Cache is already empty.');
+                return;
+            }
+            
+            const confirmed = confirm(
+                `Are you sure you want to clear all cached invoice data?\n\n` +
+                `This will remove:\n` +
+                `• ${cacheStats.counts.pending} pending invoices\n` +
+                `• ${cacheStats.counts.approved} approved invoices\n` +
+                `• ${cacheStats.counts.rejected} rejected invoices\n\n` +
+                `This action cannot be undone.`
+            );
+            
+            if (confirmed) {
+                if (clearCache()) {
+                    displayCacheStatus();
+                    console.log('🗑️ Cache cleared successfully');
+                    alert('Cache cleared successfully.');
+                } else {
+                    alert('Error clearing cache. Please try again.');
+                }
+            }
+        }
+
+        // ===== INVOICE VALIDATOR INTEGRATION =====
+        
+        function openInvoiceValidator() {
+            console.log('🔍 Opening Invoice Validator...');
+            
+            // Open I2E_Invoice_Validator.html in new window/tab
+            const validatorUrl = './I2E_Invoice_Validator.html';
+            const validatorWindow = window.open(validatorUrl, '_blank');
+            
+            if (!validatorWindow) {
+                alert('Please allow pop-ups for this site to open the Invoice Validator.');
+                return;
+            }
+            
+            console.log('✅ Invoice Validator opened in new tab');
+        }
+        
+        // ===== APP-SPECIFIC SPY FUNCTIONS =====
+        function refreshAfterCacheClear() {
+            // Update cache status display after clearing
+            displayCacheStatus();
+        }
+        
+        // ===== INITIALIZATION =====
+        document.addEventListener('DOMContentLoaded', function() {
+            // Inject spy icon into header
+            injectSpyIcon();
+        });
+        
+        console.log('🎉 I2E Invoice Processor loaded successfully!');
+        console.log('Features: PDF.js text extraction, ExcelJS export, drag-and-drop, minus sign detection, edit/remove, field selection, invoice validator integration');
+    </script>
+</body>
+</html>
