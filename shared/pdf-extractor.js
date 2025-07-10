@@ -702,5 +702,14 @@ if (typeof module !== 'undefined' && module.exports) {
 
 // Global availability for browser usage
 if (typeof window !== 'undefined') {
+    window.extractDataFromPDF = extractDataFromPDF;
+    window.extractInvoiceData = extractInvoiceData;
+    window.extractServicePeriodFromPage = extractServicePeriodFromPage;
+    window.extractField = extractField;
+    window.extractMonthFromDate = extractMonthFromDate;
+    window.detectCreditNote = detectCreditNote;
+    window.extractInvoiceTotal = extractInvoiceTotal;
+    window.extractLineItems = extractLineItems;
+    
     console.log('I2E PDF Extractor loaded successfully');
 }

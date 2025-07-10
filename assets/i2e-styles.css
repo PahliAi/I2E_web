@@ -151,6 +151,34 @@ body {
     border-color: #dc2626;
 }
 
+/* ===== VIEW TYPE BUTTONS ===== */
+.view-type-btn {
+    background: white;
+    color: var(--text-dark);
+    border: 2px solid var(--border-gray);
+    padding: 0.75rem 1.5rem;
+    border-radius: var(--radius-medium);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 500;
+}
+
+.view-type-btn:hover {
+    background: var(--light-gray);
+    border-color: var(--primary-blue);
+}
+
+.view-type-btn.active {
+    background: var(--primary-blue);
+    color: white;
+    border-color: var(--primary-blue);
+}
+
+.view-type-btn.active:hover {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+}
+
 /* ===== FILE UPLOAD COMPONENTS ===== */
 .upload-zone {
     border: 3px dashed var(--border-gray);
@@ -852,4 +880,178 @@ body {
 .status-success {
     background: #d1fae5;
     color: #065f46;
+}
+
+/* ===== COST VIEWS STYLES ===== */
+.cost-views-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2rem;
+    margin-top: 2rem;
+}
+
+/* Cost View Cards Grid (4x4) */
+#costViewCardsGrid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+    margin-top: 2rem;
+}
+
+.cost-view-card {
+    border: 2px solid var(--border-gray);
+    border-radius: var(--radius-large);
+    background: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: var(--shadow-light);
+    overflow: hidden;
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.cost-view-card:hover {
+    box-shadow: var(--shadow-medium);
+    border-color: var(--primary-blue);
+    transform: translateY(-3px);
+}
+
+.cost-view-card .card-icon {
+    font-size: 3rem;
+    text-align: center;
+    padding: 1.5rem 1rem 1rem 1rem;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+}
+
+.cost-view-card .card-title {
+    padding: 1rem;
+    background: var(--primary-blue);
+    color: white;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+
+.cost-view-card .card-status {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: var(--success-green);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+.cost-view-card.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-color: #d1d5db;
+}
+
+.cost-view-card.disabled:hover {
+    transform: none;
+    box-shadow: var(--shadow-light);
+    border-color: #d1d5db;
+}
+
+.cost-view-card.disabled .card-title {
+    background: #6b7280;
+}
+
+.cost-view-card.disabled .card-status {
+    background: #9ca3af;
+}
+
+/* Legacy tiles for backward compatibility */
+.cost-view-tile {
+    border: 1px solid var(--border-gray);
+    border-radius: var(--radius-medium);
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-light);
+    overflow: hidden;
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+}
+
+.cost-view-tile:hover {
+    box-shadow: var(--shadow-medium);
+    border-color: var(--primary-blue);
+    transform: translateY(-2px);
+}
+
+.tile-header {
+    padding: 1rem;
+    background: var(--light-gray);
+    border-bottom: 1px solid var(--border-gray);
+}
+
+.tile-header h4 {
+    margin: 0 0 0.5rem 0;
+    color: var(--text-dark);
+    font-size: 1rem;
+}
+
+.tile-subtitle {
+    color: #6b7280;
+    font-size: 0.85rem;
+}
+
+.tile-content {
+    padding: 1rem;
+    flex: 1;
+    overflow: hidden;
+}
+
+.tile-footer {
+    padding: 0.75rem 1rem;
+    background: #f9fafb;
+    border-top: 1px solid var(--border-gray);
+    text-align: center;
+    color: #6b7280;
+    font-size: 0.8rem;
+}
+
+/* Responsive design for cost view cards */
+@media (max-width: 1200px) {
+    #costViewCardsGrid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 900px) {
+    #costViewCardsGrid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    #costViewCardsGrid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .cost-view-card .card-icon {
+        font-size: 2.5rem;
+        padding: 1rem;
+    }
+}
+
+/* Responsive grid - single column on smaller screens */
+@media (max-width: 768px) {
+    .cost-views-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
 }

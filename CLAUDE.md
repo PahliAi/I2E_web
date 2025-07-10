@@ -4,109 +4,150 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is the I2E Invoice Processor - a zero-cost, frontend-only PDF invoice data extraction tool that exports to Excel. The application consists of two main HTML files with shared JavaScript modules for processing invoices and validating data.
+**I2E (Invoice to Excel) Cost Analysis & Invoice Management System** is a zero-cost, browser-based system for cost data analysis and invoice processing. The system has been redesigned with a **cost-focused architecture** that includes:
+
+1. **Main Dashboard** (`index.html`) - Central entry point with data overview and navigation
+2. **Cost Data Analysis** - Enhanced cost views with regular and project-based pivot analysis
+3. **Invoice Extraction & Approval** - Streamlined invoice processing workflow
 
 ## Architecture
 
-### Main Applications
-- **I2E_Invoice_Processor.html** - Primary invoice processing application with PDF upload, data extraction, and Excel export
-- **I2E_Invoice_Validator.html** - Validation interface for reviewing and approving extracted invoice data
-
-### Shared Module System
-The application uses a modular architecture with shared JavaScript libraries:
-
-- **shared/i2e-common.js** - Common utilities (file handling, currency formatting, WBS standardization)
-- **shared/pdf-extractor.js** - PDF processing using PDF.js library for text extraction and invoice data parsing
-- **shared/excel-exporter.js** - Excel file generation using ExcelJS library with configurable field selection
-- **shared/i2e-cache.js** - Client-side caching system for invoice validation workflow
-- **shared/i2e-spy.js** - Development utilities and debugging tools
-
-### External Dependencies
-- **PDF.js (3.11.174)** - Client-side PDF processing
-- **ExcelJS (4.4.0)** - Excel file generation
-- **i2e-styles.css** - Shared CSS framework with responsive design
-
-## Key Features
-
-### Invoice Processing Pipeline
-1. **PDF Upload** - Drag-and-drop or file browser upload of multiple PDF files
-2. **Data Extraction** - Text extraction from PDFs with pattern matching for invoice fields
-3. **Data Validation** - Real-time validation of extracted totals vs. calculated line item sums
-4. **Excel Export** - Configurable field selection and export to Excel with multiple sheets
-
-### Data Structure
-The application extracts and processes these key fields:
-- Invoice metadata (number, date, customer, project ID)
-- Line items with service periods, quantities, unit prices, totals
-- Credit note detection and amount correction
-- VAT information and currency handling
-
-### Validation System
-- **Duplicate Detection** - Prevents processing the same invoice twice
-- **Total Validation** - Compares extracted invoice totals with calculated line item sums
-- **Credit Note Handling** - Automatic detection and amount sign correction
-- **Cache-based Workflow** - Pending/approved/rejected status tracking
-
-## Development
-
-### No Build Process
-This is a pure frontend application with no build tools, package managers, or compilation steps required. All files are served directly from the filesystem.
+### Core Technologies
+- **Frontend-only architecture** - no server dependencies
+- **PDF.js** - client-side PDF text extraction
+- **ExcelJS** - client-side Excel file generation
+- **Vanilla JavaScript** - no frameworks, modular shared utilities
+- **Local Storage** - configuration and cache persistence
+- **CSS Grid/Flexbox** - responsive layouts
 
 ### File Structure
 ```
-I2E_web/
-├── I2E_Invoice_Processor.html    # Main processing interface
-├── I2E_Invoice_Validator.html    # Validation interface
-├── assets/
-│   └── i2e-styles.css           # Shared CSS framework
-└── shared/
-    ├── i2e-common.js            # Common utilities
-    ├── pdf-extractor.js         # PDF processing logic
-    ├── excel-exporter.js        # Excel export functionality
-    ├── i2e-cache.js             # Client-side caching
-    └── i2e-spy.js               # Development utilities
+index.html                     # Main dashboard - central entry point
+I2E_Invoice_Processor.html     # PDF extraction application (self-contained)
+I2E_Invoice_Validator.html     # Cost validation and analysis application
+shared/
+├── i2e-common.js             # Shared utilities (file handling, currency, validation)
+├── i2e-cache.js              # Local storage management and data caching
+├── i2e-spy.js                # Performance monitoring and analytics
+├── pdf-extractor.js          # PDF processing and data extraction logic
+└── excel-exporter.js         # Excel generation and formatting
+assets/
+└── i2e-styles.css            # Shared CSS styles with dashboard components
+design/                       # Technical documentation and design specs
+archive/                      # Legacy files and test data
 ```
 
-### Testing
-- Manual testing through browser interface
-- No automated test suite
-- Validation testing through the I2E_Invoice_Validator.html interface
+## Key Features
+
+### Main Dashboard (`index.html`)
+- **Cache data overview** - displays file statistics and invoice status counts
+- **Smart navigation** - buttons enabled only when required data is available
+- **Unified upload** - drag-and-drop areas for both cost data (XLSX) and invoices (PDF)
+- **Help integration** - prominent help button with README modal
+- **Responsive design** - three-section layout (overview, upload, navigation)
+
+### Cost Data Analysis
+- **Dual view modes** - Regular views and Project-based views
+- **Regular views** - traditional field-by-field analysis (hours per employee, costs per supplier)
+- **Project views** - expandable/collapsible project-centric analysis with pivot tables
+- **Real-time filtering** - project name search and multi-select capabilities
+- **Enhanced visualizations** - monthly costs, cost by type, supplier analysis
+
+### Invoice Extraction & Approval
+- **Streamlined workflow** - direct access to pending invoices from dashboard
+- **VAT-pattern-anchored extraction** - uses VAT percentages as primary line detection
+- **Multi-page intelligence** - analyzes all pages, prefers "Total" over "Subtotal"
+- **Service period extraction** - extracts month names from headers (JAN 2024, FEB 2025)
+- **Credit note support** - negative amounts with baby-blue highlighting
+- **Cost validation** - compares against PPM and EXT SAP data
+
+## Common Development Tasks
+
+### Building and Testing
+```bash
+# No build process required - direct HTML file deployment
+# Test by opening files in browser
+
+# Main entry point - always start here
+open index.html
+
+# Direct navigation (for development/testing)
+open I2E_Invoice_Validator.html?view=costviews    # Cost analysis view
+open I2E_Invoice_Validator.html?view=pending      # Invoice approval view
+```
+
+### Data Extraction Patterns
+Key regex patterns are located in `shared/pdf-extractor.js`:
+- Project ID: `AA44-PRO0012345` or `PRO0012345` format
+- VAT detection: Pattern-based line item identification
+- Service periods: Month name extraction from headers
+- Currency handling: Multiple format support (€1,234.56, 1.234,56)
+
+### Storage Management
+Use `shared/i2e-cache.js` for data persistence:
+- `cacheInvoiceData()` - store processed invoices
+- `getCachedInvoiceData()` - retrieve cached data
+- `clearCacheByProject()` - project-specific cleanup
+- Local storage keys use `i2e_` prefix for consistency
+
+### Excel Export Configuration
+Export field configuration in `shared/excel-exporter.js`:
+- Default fields: filename, customer ID, invoice number, project ID, service period
+- Detailed report: all available fields including position codes
+- Custom selection: user-defined field ordering
+- Uses ExcelJS for client-side generation
+
+## Debugging and Troubleshooting
+
+### Common Issues
+- **PDF extraction failures**: Check for text-based PDFs (not scanned images)
+- **Memory issues**: Large files may exceed browser memory limits
+- **Data validation errors**: Red highlighting indicates extraction vs calculation mismatches
+- **Cache corruption**: Use `clearStorageByPrefix('i2e_')` from i2e-common.js
+
+### Performance Monitoring
+The `i2e-spy.js` module provides performance tracking:
+- Processing times for PDF extraction
+- Memory usage monitoring
+- Error rate tracking
+- Cache hit/miss ratios
 
 ### Browser Compatibility
-- Requires modern browser with ES6+ support
-- Uses Web APIs: FileReader, localStorage, Blob, URL.createObjectURL
-- External CDN dependencies must be accessible
+- Requires modern browser with JavaScript enabled
+- PDF.js requires Chrome 80+, Firefox 75+, Safari 13+, Edge 80+
+- Minimum 2GB RAM for large invoice processing
 
-## Common Operations
+## Data Privacy and Security
 
-### Adding New Invoice Fields
-1. Update field definitions in `I2E_Invoice_Processor.html` (allFields object)
-2. Add extraction logic in `shared/pdf-extractor.js` (extractField function)
-3. Update Excel export headers in `shared/excel-exporter.js`
+All processing occurs client-side:
+- No data transmission to external servers
+- Local storage only for configuration persistence
+- PDF processing happens entirely in browser memory
+- Suitable for confidential financial data
 
-### Modifying PDF Parsing
-- Text extraction logic is in `shared/pdf-extractor.js`
-- Pattern matching uses regular expressions for different invoice formats
-- Service period extraction is page-specific to handle multi-page invoices
+## Integration Points
 
-### Customizing Export Format
-- Field selection UI is in the field selection modal
-- Export configuration can be saved to localStorage
-- Multiple export presets are available (default, detailed, summary)
+### Adding New Data Sources
+1. Update main dashboard upload processing (`index.html` processCostFiles function)
+2. Modify data parsing logic in respective modules
+3. Update cache structure if needed (`shared/i2e-cache.js`)
+4. Test with sample data files
 
-## Data Flow
+### Extending Cost Views
+1. Add new view types to `switchViewType()` function in validator
+2. Create corresponding view generation functions
+3. Update project-based pivot logic for new data dimensions
+4. Add CSS styling for new view components
 
-1. **File Upload** → PDF files uploaded via drag-and-drop or file input
-2. **PDF Processing** → Text extraction using PDF.js, pattern matching for data fields
-3. **Data Structuring** → Hierarchical organization by invoice → service period → line items
-4. **Validation** → Real-time validation of totals, duplicate detection, credit note handling
-5. **Caching** → Storage in localStorage for validation workflow
-6. **Export** → Configurable Excel export with multiple sheets and formatting
+### Dashboard Navigation
+1. URL parameter handling in `handleDashboardNavigation()` function
+2. Tab hiding/showing logic in `hideTabs()` and `hideTabNavigation()`
+3. Navigation button state management in `updateNavigationButtons()`
+4. Cache monitoring functions for data availability checks
 
-## Security Notes
+## Current Limitations
 
-- All processing is client-side only
-- No server communication or data transmission
-- Files are processed in browser memory only
-- localStorage used for caching and configuration
-- No authentication or access control (frontend-only tool)
+- **OCR not supported** - requires machine-readable PDFs
+- **Client-side memory limits** - large batches may cause performance issues
+- **Browser-specific storage** - data tied to specific browser instance
+- **Manual template sharing** - no automated template distribution system

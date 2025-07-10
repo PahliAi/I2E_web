@@ -12,12 +12,12 @@ const SPY_CONFIG = {
     icon: {
         emoji: '🕵️‍♂️',
         opacity: {
-            hidden: '0.3',
-            visible: '0.8'
+            hidden: '0.1',
+            visible: '0.3'
         },
         position: {
             top: '10px',
-            right: '20px'
+            right: '77px'  // 1.5cm (approximately 57px) + original 20px = 77px
         }
     },
     modal: {
@@ -36,8 +36,19 @@ function injectSpyIcon(containerId = null) {
     const headerSelector = containerId ? `#${containerId}` : '.header';
     const header = document.querySelector(headerSelector);
     
+    console.log('🕵️ Spy icon: Attempting injection with selector:', headerSelector);
+    console.log('🕵️ Spy icon: Header found:', !!header);
+    
     if (!header) {
         console.warn('🕵️ Spy icon: Header not found for injection');
+        console.log('🕵️ Spy icon: Available elements with class "header":', document.querySelectorAll('.header'));
+        return;
+    }
+    
+    // Check if spy icon already exists
+    const existingSpyIcon = header.querySelector('.spy-icon');
+    if (existingSpyIcon) {
+        console.log('🕵️ Spy icon: Already exists, skipping injection');
         return;
     }
     
@@ -55,18 +66,24 @@ function injectSpyIcon(containerId = null) {
         top: ${SPY_CONFIG.icon.position.top}; 
         right: ${SPY_CONFIG.icon.position.right}; 
         cursor: pointer; 
-        opacity: ${SPY_CONFIG.icon.opacity.hidden}; 
+        opacity: ${SPY_CONFIG.icon.opacity.visible}; 
         transition: opacity 0.3s ease; 
         font-size: 1.5rem;
+        z-index: 1100;
+        pointer-events: auto;
     `;
     spyIcon.title = '🕵️ Cache Inspector';
     spyIcon.textContent = SPY_CONFIG.icon.emoji;
     
     // Hover effects
-    spyIcon.onmouseover = () => spyIcon.style.opacity = SPY_CONFIG.icon.opacity.visible;
-    spyIcon.onmouseout = () => spyIcon.style.opacity = SPY_CONFIG.icon.opacity.hidden;
+    spyIcon.onmouseover = () => spyIcon.style.opacity = '1.0';
+    spyIcon.onmouseout = () => spyIcon.style.opacity = SPY_CONFIG.icon.opacity.visible;
     
     header.appendChild(spyIcon);
+    
+    console.log('🕵️ Spy icon: Element created and added to DOM');
+    console.log('🕵️ Spy icon: Final styles:', spyIcon.style.cssText);
+    console.log('🕵️ Spy icon: Element in DOM:', document.querySelector('.spy-icon'));
     
     logInfo('🕵️ Spy icon injected successfully');
 }
@@ -678,6 +695,25 @@ function updateClearCacheButton(cacheStats) {
             const exportButton = actionsElement.querySelector('button');
             exportButton.parentNode.insertBefore(clearButton, exportButton.nextSibling);
         }
+        
+        // Add Excel cache clearing button
+        const existingExcelButton = actionsElement.querySelector('.clear-excel-btn');
+        if (!existingExcelButton) {
+            const clearExcelButton = document.createElement('button');
+            clearExcelButton.className = 'clear-excel-btn';
+            clearExcelButton.onclick = clearExcelCacheWithConfirm;
+            clearExcelButton.style.cssText = `
+                background: #f59e0b; color: white; border: none; 
+                padding: 10px 20px; margin-right: 10px; border-radius: 4px; cursor: pointer;
+            `;
+            clearExcelButton.innerHTML = '📊 Clear Excel Files';
+            
+            // Insert after the clear cache button
+            const clearCacheBtn = actionsElement.querySelector('.clear-cache-btn');
+            if (clearCacheBtn) {
+                clearCacheBtn.parentNode.insertBefore(clearExcelButton, clearCacheBtn.nextSibling);
+            }
+        }
     }
     // Note: 80% rule disabled - button always shown for testing
 }
@@ -1102,6 +1138,35 @@ function clearCacheWithConfirm() {
         } else {
             console.error('❌ Error clearing cache!');
             logError('🕵️ Cache clear failed');
+        }
+    }
+}
+
+/**
+ * Clear Excel cache with confirmation
+ */
+function clearExcelCacheWithConfirm() {
+    if (confirm('📊 Are you sure you want to clear Excel file cache?\n\nThis will delete all uploaded cost data files (PPM, EXT SAP, I2E data).\n\nThis action cannot be undone!')) {
+        try {
+            // Clear the Excel/cost data cache
+            localStorage.removeItem('i2e_cost_data_cache');
+            
+            console.log('✅ Excel cache cleared successfully!');
+            closeSpyModal();
+            
+            // Call app-specific refresh function if available
+            if (typeof refreshAfterCacheClear === 'function') {
+                refreshAfterCacheClear();
+            } else {
+                // Default: reload page
+                location.reload();
+            }
+            
+            logInfo('🕵️ Excel cache cleared successfully');
+        } catch (error) {
+            console.error('❌ Error clearing Excel cache:', error);
+            alert('Error clearing Excel cache: ' + error.message);
+            logError('🕵️ Excel cache clear failed');
         }
     }
 }

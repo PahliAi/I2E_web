@@ -1,0 +1,1633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>I2E Cost Data Analysis</title>
+    
+    <!-- External Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+    
+    <!-- I2E Modules -->
+    <script src="shared/i2e-common.js"></script>
+    <script src="shared/i2e-cache.js"></script>
+    <script src="shared/i2e-spy.js"></script>
+    
+    
+    <!-- Shared Styles -->
+    <link rel="stylesheet" href="assets/i2e-styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header" style="position: relative;">
+            <button onclick="window.location.href = 'index.html'" title="Home" style="position: absolute; top: 10px; left: 20px; width: 40px; height: 40px; background: none; border: none; cursor: pointer; opacity: 1.0; transition: opacity 0.3s ease; font-size: 1.5rem;">🏠</button>
+            <h1>Cost Data Analysis</h1>
+            <p>Analyze cost data with regular and project-based views</p>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="card">
+            <!-- View Type Selector Removed - Now handled within individual cards -->
+            
+            <!-- Filter Controls -->
+            <div class="filter-container" style="margin-bottom: 1rem;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="filter-input">
+                        <label style="font-weight: 600; margin-bottom: 0.5rem; display: block;">Project Name Filter:</label>
+                        <input type="text" id="costViewProjectFilter" placeholder="Type 'mira' to find projects..." onkeyup="updateCostViewProjectDropdown()" style="padding: 0.75rem; width: 100%; font-size: 1rem; border: 2px solid #e5e7eb; border-radius: 8px;">
+                        <small style="color: #6b7280;">Search by Project Name or WBS ID (case insensitive)</small>
+                        <!-- Left side buttons under text filter -->
+                        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                            <button class="btn" onclick="clearCostViewFilter()" style="padding: 0.5rem 1rem; font-size: 0.9rem;">Clear Filter</button>
+                            <button class="btn btn-success" id="generateViewsBtn" onclick="generateCostViews()" disabled style="padding: 0.5rem 1.5rem; font-size: 0.9rem;">📊 Generate Views</button>
+                        </div>
+                    </div>
+                    <div class="filter-dropdown">
+                        <label style="font-weight: 600; margin-bottom: 0.5rem; display: block;">Select Projects: <small style="color: #059669;">(Hold Ctrl/Cmd for multiple)</small></label>
+                        <select id="costViewProjectSelect" multiple size="4" style="padding: 0.5rem; width: 100%; font-size: 0.9rem; border: 2px solid #e5e7eb; border-radius: 8px;" onchange="applyCostViewProjectSelection()">
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                        <!-- Right side buttons under dropdown -->
+                        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                            <button class="btn" onclick="selectAllCostViewProjects()" style="padding: 0.5rem 1rem; font-size: 0.9rem;">Select All</button>
+                            <button class="btn" onclick="deselectAllCostViewProjects()" style="padding: 0.5rem 1rem; font-size: 0.9rem;">Deselect All</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="costViewFilterResults" class="filter-results" style="display: none;">
+                    <!-- Filter summary will be shown here -->
+                </div>
+            </div>
+            
+            <!-- Regular Views Grid -->
+            <div id="regularViewsContainer" style="display: block;">
+                <div id="costViewCardsGrid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-top: 2rem;">
+                    <!-- Cards will be populated here -->
+                </div>
+            </div>
+            
+            <!-- Project Views Container -->
+            <div id="projectViewsContainer" style="display: none;">
+                <div id="projectViewsGrid" style="margin-top: 2rem;">
+                    <!-- Project-based pivot views will be populated here -->
+                </div>
+            </div>
+            
+            <!-- No Data Message -->
+            <div id="costViewsNoData" style="text-align: center; padding: 2rem; color: #6b7280;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+                <h4>Select Projects and Generate Views</h4>
+                <p>Choose projects from the filter above and click "Generate Views" to see cost visualizations.</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Cost View Modal -->
+    <div id="costViewModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 95vw; max-height: 95vh; width: auto; height: auto; display: flex; flex-direction: column;">
+            <div class="modal-header" style="flex-shrink: 0;">
+                <h2 id="costViewModalTitle">Cost View</h2>
+                <button class="close-btn" onclick="closeCostViewModal()">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem; overflow: auto; flex: 1; min-height: 0;">
+                <div id="costViewModalContent">
+                    <!-- Expanded chart content will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+
+    <script>
+        // Global variables
+        let costViewsFilteredData = [];
+        let currentViewType = 'regular';
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Inject spy icon into header
+            injectSpyIcon();
+            initializeCostViews();
+        });
+        
+        function initializeCostViews() {
+            console.log('🎯 Initializing cost views...');
+            
+            // Load cost data from cache
+            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            
+            if (costData.length === 0) {
+                document.getElementById('costViewsNoData').style.display = 'block';
+                return;
+            }
+            
+            // Initialize with all data
+            costViewsFilteredData = costData;
+            
+            updateCostViewProjectDropdown();
+            refreshCostViews();
+        }
+        
+        function updateCostViewProjectDropdown() {
+            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            const projectSelect = document.getElementById('costViewProjectSelect');
+            const filterInput = document.getElementById('costViewProjectFilter');
+            
+            if (!projectSelect || !filterInput) return;
+            
+            const filterText = filterInput.value.toLowerCase();
+            
+            // Get unique projects - check multiple field names for compatibility
+            const projects = [...new Set(costData.map(item => {
+                // Handle both old and new formats
+                return item['Project Name'] || item.projectName || item['WBS Element ID'] || item.wbs || 'Unknown';
+            }))];
+            
+            console.log('🔍 Available projects:', projects.slice(0, 10));
+            console.log('🔍 Sample cost data item:', costData[0]);
+            
+            // Filter projects based on search
+            const filteredProjects = projects.filter(project => 
+                project.toLowerCase().includes(filterText)
+            );
+            
+            // Update dropdown
+            projectSelect.innerHTML = '';
+            filteredProjects.forEach(project => {
+                const option = document.createElement('option');
+                option.value = project;
+                option.textContent = project;
+                option.selected = true; // Auto-select all filtered projects
+                projectSelect.appendChild(option);
+            });
+            
+            // Trigger selection change event to update the UI
+            if (filteredProjects.length > 0) {
+                applyCostViewProjectSelection();
+            }
+        }
+        
+        function applyCostViewProjectSelection() {
+            const projectSelect = document.getElementById('costViewProjectSelect');
+            const selectedProjects = Array.from(projectSelect.selectedOptions).map(option => option.value);
+            
+            if (selectedProjects.length > 0) {
+                document.getElementById('generateViewsBtn').disabled = false;
+            } else {
+                document.getElementById('generateViewsBtn').disabled = true;
+            }
+        }
+        
+        function selectAllCostViewProjects() {
+            const projectSelect = document.getElementById('costViewProjectSelect');
+            for (let option of projectSelect.options) {
+                option.selected = true;
+            }
+            applyCostViewProjectSelection();
+        }
+        
+        function deselectAllCostViewProjects() {
+            const projectSelect = document.getElementById('costViewProjectSelect');
+            for (let option of projectSelect.options) {
+                option.selected = false;
+            }
+            applyCostViewProjectSelection();
+        }
+        
+        function clearCostViewFilter() {
+            document.getElementById('costViewProjectFilter').value = '';
+            document.getElementById('costViewProjectSelect').innerHTML = '';
+            updateCostViewProjectDropdown();
+            // Auto-select all projects after clearing filter
+            selectAllCostViewProjects();
+        }
+        
+        function switchViewType(viewType) {
+            currentViewType = viewType;
+            
+            // Update button states
+            document.querySelectorAll('.view-type-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById(viewType + 'ViewBtn').classList.add('active');
+            
+            // Show/hide containers
+            const regularContainer = document.getElementById('regularViewsContainer');
+            const projectContainer = document.getElementById('projectViewsContainer');
+            
+            if (viewType === 'regular') {
+                regularContainer.style.display = 'block';
+                projectContainer.style.display = 'none';
+            } else {
+                regularContainer.style.display = 'none';
+                projectContainer.style.display = 'block';
+            }
+            
+            // Regenerate views if data is available
+            if (costViewsFilteredData.length > 0) {
+                generateCostViews();
+            }
+        }
+        
+        function generateCostViews() {
+            console.log('🔄 Generating cost views for selected projects...');
+            
+            // First filter the data based on selected projects
+            filterCostViewProjects();
+            
+            const noDataDiv = document.getElementById('costViewsNoData');
+            
+            if (costViewsFilteredData.length === 0) {
+                noDataDiv.style.display = 'block';
+                return;
+            }
+            
+            // Generate views based on current view type
+            if (currentViewType === 'project') {
+                generateProjectViews();
+            } else {
+                generateRegularViews();
+            }
+            
+            noDataDiv.style.display = 'none';
+        }
+        
+        function filterCostViewProjects() {
+            const projectSelect = document.getElementById('costViewProjectSelect');
+            const selectedProjects = Array.from(projectSelect.selectedOptions).map(option => option.value);
+            
+            const allCostData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            
+            if (selectedProjects.length === 0) {
+                costViewsFilteredData = [];
+                return;
+            }
+            
+            costViewsFilteredData = allCostData.filter(item => {
+                // Use the same field name logic as dropdown population
+                const projectName = item['Project Name'] || item.projectName || item['WBS Element ID'] || item.wbs || 'Unknown';
+                return selectedProjects.includes(projectName);
+            });
+            
+            console.log('🔍 Filtered cost data:', costViewsFilteredData.length, 'entries');
+        }
+        
+        function generateRegularViews() {
+            console.log('🔄 Generating regular cost views...');
+            const noDataDiv = document.getElementById('costViewsNoData');
+            const cardsGrid = document.getElementById('costViewCardsGrid');
+            
+            // Hide no data message and show cards
+            noDataDiv.style.display = 'none';
+            
+            // Generate the cost view cards (copied from Validator)
+            const cards = [
+                {
+                    id: 'hours-per-week',
+                    icon: '⏰',
+                    title: 'Employee Hours/Cost per Period',
+                    status: 'Ready',
+                    enabled: true
+                },
+                {
+                    id: 'invoices-per-supplier',
+                    icon: '🏢',
+                    title: 'Supplier cost per period',
+                    status: 'Ready',
+                    enabled: true
+                },
+                {
+                    id: 'cost-by-project',
+                    icon: '📊',
+                    title: 'Cost by Project',
+                    status: 'Coming Soon',
+                    enabled: false
+                },
+                {
+                    id: 'monthly-trends',
+                    icon: '📈',
+                    title: 'Monthly Cost Trends',
+                    status: 'Coming Soon',
+                    enabled: false
+                },
+                {
+                    id: 'employee-utilization',
+                    icon: '👥',
+                    title: 'Employee Utilization',
+                    status: 'Coming Soon',
+                    enabled: false
+                },
+                {
+                    id: 'budget-vs-actual',
+                    icon: '💰',
+                    title: 'Budget vs Actual',
+                    status: 'Coming Soon',
+                    enabled: false
+                },
+                {
+                    id: 'project-timeline',
+                    icon: '📅',
+                    title: 'Project Timeline',
+                    status: 'Coming Soon',
+                    enabled: false
+                },
+                {
+                    id: 'cost-distribution',
+                    icon: '🥧',
+                    title: 'Cost Distribution',
+                    status: 'Coming Soon',
+                    enabled: false
+                }
+            ];
+            
+            let cardsHtml = '';
+            cards.forEach(card => {
+                const disabledClass = card.enabled ? '' : 'disabled';
+                
+                const onclick = card.enabled ? `onclick="openCostViewModal('${card.id}')"` : '';
+                
+                cardsHtml += `
+                    <div class="cost-view-card ${disabledClass}" ${onclick}>
+                        <div class="card-status">${card.status}</div>
+                        <div class="card-icon">${card.icon}</div>
+                        <div class="card-title">${card.title}</div>
+                    </div>
+                `;
+            });
+            
+            cardsGrid.innerHTML = cardsHtml;
+            
+            console.log(`✅ Generated ${cards.length} cost view cards`);
+        }
+        
+        function generateProjectViews() {
+            console.log('🔄 Generating project-based views...');
+            
+            const projectGrid = document.getElementById('projectViewsGrid');
+            if (!projectGrid) return;
+            
+            // Group data by project
+            const projectGroups = {};
+            costViewsFilteredData.forEach(item => {
+                const projectKey = item.projectName || item.wbs || 'Unknown Project';
+                if (!projectGroups[projectKey]) {
+                    projectGroups[projectKey] = [];
+                }
+                projectGroups[projectKey].push(item);
+            });
+            
+            let html = '<div class="project-views-list">';
+            
+            Object.keys(projectGroups).sort().forEach(projectName => {
+                const projectData = projectGroups[projectName];
+                
+                html += `
+                    <div class="project-view-item" style="margin-bottom: 2rem; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+                        <div class="project-header" style="background: #f8fafc; padding: 1rem; border-bottom: 1px solid #e5e7eb; cursor: pointer;" onclick="toggleProjectView('${makeCSSClass(projectName)}')">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <h4 style="margin: 0; color: var(--primary-blue);">
+                                    <span id="toggle_${makeCSSClass(projectName)}" style="margin-right: 0.5rem;">▶</span>
+                                    ${projectName}
+                                </h4>
+                                <div style="font-size: 0.9rem; color: #6b7280;">
+                                    ${projectData.length} entries | €${projectData.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0).toLocaleString()}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="project-content" id="project_${makeCSSClass(projectName)}" style="display: none; padding: 1rem;">
+                            ${generateProjectPivotViews(projectData, projectName)}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            projectGrid.innerHTML = html;
+        }
+        
+        function generateProjectPivotViews(projectData, projectName) {
+            let html = '<div class="project-pivot-views" style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">';
+            
+            // View 1: Cost by Month
+            const monthlyData = {};
+            projectData.forEach(item => {
+                const month = item.month || 'Unknown';
+                monthlyData[month] = (monthlyData[month] || 0) + (parseFloat(item.value) || 0);
+            });
+            
+            html += `
+                <div class="pivot-view">
+                    <h5 style="margin-bottom: 1rem; color: var(--primary-blue);">📅 Monthly Costs</h5>
+                    <div class="pivot-table" style="max-height: 300px; overflow-y: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                            <thead>
+                                <tr style="background: #f3f4f6;">
+                                    <th style="border: 1px solid #d1d5db; padding: 0.5rem; text-align: left;">Month</th>
+                                    <th style="border: 1px solid #d1d5db; padding: 0.5rem; text-align: right;">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            
+            Object.keys(monthlyData).sort().forEach(month => {
+                html += `
+                    <tr>
+                        <td style="border: 1px solid #d1d5db; padding: 0.5rem;">${month}</td>
+                        <td style="border: 1px solid #d1d5db; padding: 0.5rem; text-align: right;">€${monthlyData[month].toLocaleString()}</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table></div></div>';
+            
+            // View 2: Cost by Type
+            const typeData = {};
+            projectData.forEach(item => {
+                const type = item.type || item.source || 'Unknown';
+                typeData[type] = (typeData[type] || 0) + (parseFloat(item.value) || 0);
+            });
+            
+            html += `
+                <div class="pivot-view">
+                    <h5 style="margin-bottom: 1rem; color: var(--primary-blue);">🏷️ Cost by Type</h5>
+                    <div class="pivot-table" style="max-height: 300px; overflow-y: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                            <thead>
+                                <tr style="background: #f3f4f6;">
+                                    <th style="border: 1px solid #d1d5db; padding: 0.5rem; text-align: left;">Type</th>
+                                    <th style="border: 1px solid #d1d5db; padding: 0.5rem; text-align: right;">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            
+            Object.keys(typeData).sort().forEach(type => {
+                html += `
+                    <tr>
+                        <td style="border: 1px solid #d1d5db; padding: 0.5rem;">${type}</td>
+                        <td style="border: 1px solid #d1d5db; padding: 0.5rem; text-align: right;">€${typeData[type].toLocaleString()}</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table></div></div>';
+            html += '</div>';
+            
+            return html;
+        }
+        
+        function toggleProjectView(projectId) {
+            const content = document.getElementById(projectId);
+            const toggle = document.getElementById(`toggle_${projectId}`);
+            
+            if (!content || !toggle) return;
+            
+            const isExpanded = content.style.display !== 'none';
+            
+            if (isExpanded) {
+                content.style.display = 'none';
+                toggle.textContent = '▶';
+            } else {
+                content.style.display = 'block';
+                toggle.textContent = '▼';
+            }
+        }
+        
+        function refreshCostViews() {
+            // Auto-select all projects initially
+            selectAllCostViewProjects();
+            generateCostViews();
+        }
+        
+        // Global object to track each card's view type
+        let cardViewTypes = {};
+        
+        function toggleCardView(cardId, viewType) {
+            console.log(`🔄 Toggling card ${cardId} to ${viewType} view`);
+            
+            // Update global state
+            cardViewTypes[cardId] = viewType;
+            
+            // Update button states for this card
+            const regularBtn = document.getElementById(`regular-${cardId}`);
+            const projectBtn = document.getElementById(`project-${cardId}`);
+            
+            if (regularBtn && projectBtn) {
+                // Remove active class from both buttons
+                regularBtn.classList.remove('active');
+                projectBtn.classList.remove('active');
+                
+                // Add active class to selected button
+                if (viewType === 'regular') {
+                    regularBtn.classList.add('active');
+                } else {
+                    projectBtn.classList.add('active');
+                }
+                
+                console.log(`✅ Card ${cardId} view switched to ${viewType}`);
+            }
+        }
+        
+        function getCardViewType(cardId) {
+            // Return the current view type for a card (default to 'regular')
+            return cardViewTypes[cardId] || 'regular';
+        }
+        
+        function openCostViewModal(cardId) {
+            console.log(`🔍 Opening modal for card: ${cardId}`);
+            
+            const modal = document.getElementById('costViewModal');
+            const titleElement = document.getElementById('costViewModalTitle');
+            const contentElement = document.getElementById('costViewModalContent');
+            
+            // Get the current view type for this card
+            const viewType = getCardViewType(cardId);
+            
+            // Set title based on card type and view type
+            const titles = {
+                'hours-per-week': '👥 Employee Hours/Cost per Period',
+                'invoices-per-supplier': '🏢 Supplier Cost per Period',
+                'cost-by-project': '📊 Cost by Project',
+                'monthly-trends': '📈 Monthly Cost Trends',
+                'employee-utilization': '👥 Employee Utilization',
+                'budget-vs-actual': '💰 Budget vs Actual',
+                'project-timeline': '📅 Project Timeline',
+                'cost-distribution': '🥧 Cost Distribution'
+            };
+            
+            const baseTitle = titles[cardId] || 'Cost View';
+            const viewTypeLabel = viewType === 'regular' ? '📊 Regular View' : '🏗️ Project View';
+            titleElement.textContent = `${baseTitle} - ${viewTypeLabel}`;
+            
+            // Show loading message
+            contentElement.innerHTML = `
+                <div style="text-align: center; padding: 2rem;">
+                    <div style="font-size: 2rem; margin-bottom: 1rem;">⏳</div>
+                    <h4>Generating ${viewTypeLabel}...</h4>
+                    <p>Processing ${costViewsFilteredData.length.toLocaleString()} records</p>
+                </div>
+            `;
+            
+            // Show modal
+            modal.style.display = 'block';
+            
+            // Generate content based on card type and view type
+            setTimeout(() => {
+                generateCostViewContent(cardId, viewType);
+            }, 100);
+        }
+        
+        function generateCostViewContent(cardId, viewType) {
+            const contentElement = document.getElementById('costViewModalContent');
+            
+            // Add toggle controls within the modal content
+            const toggleControls = `
+                <div style="display: flex; justify-content: center; gap: 1rem; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 2px solid #e5e7eb;">
+                    <button class="btn ${viewType === 'regular' ? 'btn-primary' : ''}" 
+                            onclick="switchModalView('${cardId}', 'regular')" 
+                            style="padding: 0.5rem 1rem; ${viewType === 'regular' ? 'background-color: #3b82f6; color: white;' : ''}">
+                        📊 Regular View
+                    </button>
+                    <button class="btn ${viewType === 'project' ? 'btn-primary' : ''}" 
+                            onclick="switchModalView('${cardId}', 'project')" 
+                            style="padding: 0.5rem 1rem; ${viewType === 'project' ? 'background-color: #3b82f6; color: white;' : ''}">
+                        🏗️ Project View
+                    </button>
+                </div>
+            `;
+            
+            switch(cardId) {
+                case 'hours-per-week':
+                    contentElement.innerHTML = toggleControls + generateHoursPerWeekView(viewType);
+                    break;
+                case 'invoices-per-supplier':
+                    contentElement.innerHTML = toggleControls + generateInvoicesPerSupplierView(viewType);
+                    break;
+                default:
+                    contentElement.innerHTML = toggleControls + `
+                        <div style="text-align: center; padding: 2rem;">
+                            <div style="font-size: 2rem; margin-bottom: 1rem;">🚧</div>
+                            <h4>View Coming Soon</h4>
+                            <p>This cost view is under development and will be available in a future update.</p>
+                            <p><strong>Current Selection:</strong> ${viewType === 'regular' ? '📊 Regular View' : '🏗️ Project View'}</p>
+                        </div>
+                    `;
+            }
+        }
+        
+        function generateHoursPerWeekView(viewType) {
+            // Get current selections or set defaults
+            const period = window.employeePeriodSelection || 'Month';
+            const metric = window.employeeMetricSelection || 'Hours';
+            
+            if (viewType === 'regular') {
+                return generateRegularEmployeeView(period, metric);
+            } else {
+                return generateProjectEmployeeView(period, metric);
+            }
+        }
+        
+        function generateRegularEmployeeView(period, metric) {
+            // Filter PPM data for employees
+            const ppmData = costViewsFilteredData.filter(item => item.source === 'PPM');
+            
+            if (ppmData.length === 0) {
+                return `
+                    <div style="text-align: center; padding: 2rem;">
+                        <h4>👥 Employee ${metric} per ${period} - Regular View</h4>
+                        <p>No PPM data available for the selected projects.</p>
+                    </div>
+                `;
+            }
+            
+            // Add period and metric selection controls
+            const controls = `
+                <div style="display: flex; justify-content: center; gap: 2rem; margin-bottom: 2rem; padding: 1rem; background: #f9fafb; border-radius: 8px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">📅 Period:</label>
+                        <select onchange="updateEmployeePeriod(this.value)" style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+                            <option value="Week" ${period === 'Week' ? 'selected' : ''}>Week</option>
+                            <option value="Month" ${period === 'Month' ? 'selected' : ''}>Month</option>
+                            <option value="Year" ${period === 'Year' ? 'selected' : ''}>Year</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">📊 Metric:</label>
+                        <select onchange="updateEmployeeMetric(this.value)" style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+                            <option value="Hours" ${metric === 'Hours' ? 'selected' : ''}>Hours</option>
+                            <option value="Cost" ${metric === 'Cost' ? 'selected' : ''}>Cost</option>
+                        </select>
+                    </div>
+                </div>
+            `;
+            
+            // Group data by employee and period
+            const employeeData = {};
+            const allPeriods = new Set();
+            
+            ppmData.forEach(item => {
+                const employee = item.User || item.user || 'Unknown Employee';
+                const cost = parseFloat(item['Cost €'] || item.value || 0);
+                const hours = parseFloat(item['Total'] || item.total || 0);
+                // Use different fields based on period selection
+                let dateStr = '';
+                if (period === 'Week') {
+                    dateStr = item['Week starts on'] || item.weekStartsOn || item.week || '';
+                } else {
+                    dateStr = item['Month of invoice'] || item.month || item['Month'] || item['Period'] || item.period || '';
+                }
+                
+                let periodKey = '';
+                if (dateStr) {
+                    let date = null;
+                    
+                    if (period === 'Week') {
+                        // For weeks, expect 'Week starts on' to be a proper date
+                        date = new Date(dateStr);
+                        
+                        // If standard parsing fails for week dates, try different formats
+                        if (isNaN(date.getTime())) {
+                            // Try YYYY-MM-DD format
+                            if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                date = new Date(dateStr);
+                            }
+                            // Try MM/DD/YYYY format
+                            else if (dateStr.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                                const [month, day, year] = dateStr.split('/');
+                                date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                            }
+                            // Try DD/MM/YYYY format
+                            else if (dateStr.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                                const [day, month, year] = dateStr.split('/');
+                                date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                            }
+                        }
+                    } else {
+                        // For months/years, handle month names and period numbers
+                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                                          'July', 'August', 'September', 'October', 'November', 'December'];
+                        const shortMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                                               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                        
+                        // Check if it's a month name
+                        let monthIndex = monthNames.findIndex(month => month.toLowerCase() === dateStr.toLowerCase());
+                        if (monthIndex === -1) {
+                            monthIndex = shortMonthNames.findIndex(month => month.toLowerCase() === dateStr.toLowerCase());
+                        }
+                        
+                        if (monthIndex !== -1) {
+                            // Use current year for month names
+                            const currentYear = new Date().getFullYear();
+                            date = new Date(currentYear, monthIndex, 1);
+                        }
+                        // Handle period numbers (1, 2, 3, 4, etc.)
+                        else if (dateStr.match(/^\d+$/)) {
+                            const periodNum = parseInt(dateStr);
+                            if (periodNum >= 1 && periodNum <= 12) {
+                                const currentYear = new Date().getFullYear();
+                                date = new Date(currentYear, periodNum - 1, 1);
+                            }
+                        }
+                        // Try standard date parsing
+                        else {
+                            date = new Date(dateStr);
+                            
+                            // If standard parsing fails, try different formats
+                            if (isNaN(date.getTime())) {
+                                // Try YYYY-MM format
+                                if (dateStr.match(/^\d{4}-\d{2}$/)) {
+                                    const [year, month] = dateStr.split('-');
+                                    date = new Date(parseInt(year), parseInt(month) - 1, 1);
+                                }
+                                // Try MM/YYYY format
+                                else if (dateStr.match(/^\d{2}\/\d{4}$/)) {
+                                    const [month, year] = dateStr.split('/');
+                                    date = new Date(parseInt(year), parseInt(month) - 1, 1);
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (date && !isNaN(date.getTime())) {
+                        if (period === 'Week') {
+                            const weekNum = getWeekNumber(date);
+                            periodKey = `${date.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+                        } else if (period === 'Month') {
+                            periodKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                        } else if (period === 'Year') {
+                            periodKey = `${date.getFullYear()}`;
+                        }
+                    }
+                }
+                
+                if (!periodKey) periodKey = 'Unknown';
+                allPeriods.add(periodKey);
+                
+                if (!employeeData[employee]) {
+                    employeeData[employee] = {};
+                }
+                
+                if (!employeeData[employee][periodKey]) {
+                    employeeData[employee][periodKey] = {
+                        hours: 0,
+                        cost: 0,
+                        records: 0
+                    };
+                }
+                
+                employeeData[employee][periodKey].hours += hours;
+                employeeData[employee][periodKey].cost += cost;
+                employeeData[employee][periodKey].records++;
+            });
+            
+            // Sort periods and remove Unknown if there are other periods
+            const sortedPeriods = Array.from(allPeriods).sort();
+            const filteredPeriods = sortedPeriods.filter(p => p !== 'Unknown' || sortedPeriods.length === 1);
+            
+            // If no valid periods found, show a message
+            if (filteredPeriods.length === 0) {
+                return `
+                    <div style="text-align: center; padding: 2rem;">
+                        <h4>👥 Employee ${metric} per ${period} - Regular View</h4>
+                        <p>No valid date information found in the selected data. Please check the date format in your data.</p>
+                    </div>
+                `;
+            }
+            
+            let html = controls + `
+                <div>
+                    <h4 style="margin-bottom: 1rem;">👥 Employee ${metric} per ${period} - Regular View</h4>
+                    <div style="overflow-x: auto; max-width: 100%; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        <table style="border-collapse: collapse; font-size: 0.85rem; white-space: nowrap; min-width: 100%;">
+                            <thead>
+                                <tr style="background: #f3f4f6;">
+                                    <th style="border: 1px solid #d1d5db; padding: 0.4rem 0.8rem; text-align: left; position: sticky; left: 0; background: #f3f4f6; z-index: 10; min-width: 150px; max-width: 200px;">Employee</th>
+            `;
+            
+            // Add period columns with optimized width
+            filteredPeriods.forEach(periodKey => {
+                const columnWidth = metric === 'Hours' ? '70px' : '80px';
+                html += `<th style="border: 1px solid #d1d5db; padding: 0.4rem; text-align: center; min-width: ${columnWidth}; width: ${columnWidth};">${periodKey}</th>`;
+            });
+            
+            html += `
+                                    <th style="border: 1px solid #d1d5db; padding: 0.4rem; text-align: right; background: #f3f4f6; position: sticky; right: 0; z-index: 10; min-width: 100px; box-shadow: -2px 0 4px rgba(0,0,0,0.1);">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            
+            // Calculate totals for sorting
+            const employeeTotals = {};
+            Object.keys(employeeData).forEach(employee => {
+                const total = Object.values(employeeData[employee]).reduce((sum, period) => {
+                    return sum + (metric === 'Hours' ? period.hours : period.cost);
+                }, 0);
+                employeeTotals[employee] = total;
+            });
+            
+            // Sort employees by total
+            Object.keys(employeeData)
+                .sort((a, b) => employeeTotals[b] - employeeTotals[a])
+                .forEach(employee => {
+                    html += `
+                        <tr>
+                            <td style="border: 1px solid #d1d5db; padding: 0.4rem 0.8rem; font-weight: 600; position: sticky; left: 0; background: white; z-index: 5; min-width: 150px; max-width: 200px; box-shadow: 2px 0 4px rgba(0,0,0,0.1);">${employee}</td>
+                    `;
+                    
+                    // Add period values
+                    filteredPeriods.forEach(periodKey => {
+                        const periodData = employeeData[employee][periodKey];
+                        let value = 0;
+                        let display = '';
+                        
+                        if (periodData) {
+                            value = metric === 'Hours' ? periodData.hours : periodData.cost;
+                            display = metric === 'Hours' ? 
+                                `${value.toLocaleString()}h` : 
+                                `€${value.toLocaleString()}`;
+                        }
+                        
+                        const color = value >= 0 ? '#059669' : '#dc2626';
+                        html += `<td style="border: 1px solid #d1d5db; padding: 0.4rem; text-align: right; color: ${color};">${display || '-'}</td>`;
+                    });
+                    
+                    // Add total
+                    const total = employeeTotals[employee];
+                    const totalDisplay = metric === 'Hours' ? 
+                        `${total.toLocaleString()}h` : 
+                        `€${total.toLocaleString()}`;
+                    const totalColor = total >= 0 ? '#059669' : '#dc2626';
+                    html += `<td style="border: 1px solid #d1d5db; padding: 0.4rem; text-align: right; font-weight: 600; color: ${totalColor}; background: #f3f4f6; position: sticky; right: 0; z-index: 5; box-shadow: -2px 0 4px rgba(0,0,0,0.1);">${totalDisplay}</td>`;
+                    
+                    html += `</tr>`;
+                });
+            
+            html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+        
+        function generateProjectEmployeeView(period, metric) {
+            // Filter PPM data for employees
+            const ppmData = costViewsFilteredData.filter(item => item.source === 'PPM');
+            
+            if (ppmData.length === 0) {
+                return `
+                    <div style="text-align: center; padding: 2rem;">
+                        <h4>👥 Employee ${metric} per ${period} - Project View</h4>
+                        <p>No PPM data available for the selected projects.</p>
+                    </div>
+                `;
+            }
+            
+            // Add period and metric selection controls
+            const controls = `
+                <div style="display: flex; justify-content: center; gap: 2rem; margin-bottom: 2rem; padding: 1rem; background: #f9fafb; border-radius: 8px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">📅 Period:</label>
+                        <select onchange="updateEmployeePeriod(this.value)" style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+                            <option value="Week" ${period === 'Week' ? 'selected' : ''}>Week</option>
+                            <option value="Month" ${period === 'Month' ? 'selected' : ''}>Month</option>
+                            <option value="Year" ${period === 'Year' ? 'selected' : ''}>Year</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">📊 Metric:</label>
+                        <select onchange="updateEmployeeMetric(this.value)" style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+                            <option value="Hours" ${metric === 'Hours' ? 'selected' : ''}>Hours</option>
+                            <option value="Cost" ${metric === 'Cost' ? 'selected' : ''}>Cost</option>
+                        </select>
+                    </div>
+                </div>
+            `;
+            
+            // Group by project, then by employee and period
+            const projectData = {};
+            const allPeriods = new Set();
+            
+            ppmData.forEach(item => {
+                const project = item['Project Name'] || item.projectName || item['WBS Element ID'] || item.wbs || 'Unknown Project';
+                const employee = item.User || item.user || 'Unknown Employee';
+                const cost = parseFloat(item['Cost €'] || item.value || 0);
+                const hours = parseFloat(item['Total'] || item.total || 0);
+                // Use different fields based on period selection
+                let dateStr = '';
+                if (period === 'Week') {
+                    dateStr = item['Week starts on'] || item.weekStartsOn || item.week || '';
+                } else {
+                    dateStr = item['Month of invoice'] || item.month || item['Month'] || item['Period'] || item.period || '';
+                }
+                
+                let periodKey = '';
+                if (dateStr) {
+                    let date = null;
+                    
+                    if (period === 'Week') {
+                        // For weeks, expect 'Week starts on' to be a proper date
+                        date = new Date(dateStr);
+                        
+                        // If standard parsing fails for week dates, try different formats
+                        if (isNaN(date.getTime())) {
+                            // Try YYYY-MM-DD format
+                            if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                date = new Date(dateStr);
+                            }
+                            // Try MM/DD/YYYY format
+                            else if (dateStr.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                                const [month, day, year] = dateStr.split('/');
+                                date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                            }
+                            // Try DD/MM/YYYY format
+                            else if (dateStr.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                                const [day, month, year] = dateStr.split('/');
+                                date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                            }
+                        }
+                    } else {
+                        // For months/years, handle month names and period numbers
+                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                                          'July', 'August', 'September', 'October', 'November', 'December'];
+                        const shortMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                                               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                        
+                        // Check if it's a month name
+                        let monthIndex = monthNames.findIndex(month => month.toLowerCase() === dateStr.toLowerCase());
+                        if (monthIndex === -1) {
+                            monthIndex = shortMonthNames.findIndex(month => month.toLowerCase() === dateStr.toLowerCase());
+                        }
+                        
+                        if (monthIndex !== -1) {
+                            // Use current year for month names
+                            const currentYear = new Date().getFullYear();
+                            date = new Date(currentYear, monthIndex, 1);
+                        }
+                        // Handle period numbers (1, 2, 3, 4, etc.)
+                        else if (dateStr.match(/^\d+$/)) {
+                            const periodNum = parseInt(dateStr);
+                            if (periodNum >= 1 && periodNum <= 12) {
+                                const currentYear = new Date().getFullYear();
+                                date = new Date(currentYear, periodNum - 1, 1);
+                            }
+                        }
+                        // Try standard date parsing
+                        else {
+                            date = new Date(dateStr);
+                            
+                            // If standard parsing fails, try different formats
+                            if (isNaN(date.getTime())) {
+                                // Try YYYY-MM format
+                                if (dateStr.match(/^\d{4}-\d{2}$/)) {
+                                    const [year, month] = dateStr.split('-');
+                                    date = new Date(parseInt(year), parseInt(month) - 1, 1);
+                                }
+                                // Try MM/YYYY format
+                                else if (dateStr.match(/^\d{2}\/\d{4}$/)) {
+                                    const [month, year] = dateStr.split('/');
+                                    date = new Date(parseInt(year), parseInt(month) - 1, 1);
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (date && !isNaN(date.getTime())) {
+                        if (period === 'Week') {
+                            const weekNum = getWeekNumber(date);
+                            periodKey = `${date.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+                        } else if (period === 'Month') {
+                            periodKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                        } else if (period === 'Year') {
+                            periodKey = `${date.getFullYear()}`;
+                        }
+                    }
+                }
+                
+                if (!periodKey) periodKey = 'Unknown';
+                allPeriods.add(periodKey);
+                
+                if (!projectData[project]) {
+                    projectData[project] = {};
+                }
+                
+                if (!projectData[project][employee]) {
+                    projectData[project][employee] = {};
+                }
+                
+                if (!projectData[project][employee][periodKey]) {
+                    projectData[project][employee][periodKey] = {
+                        hours: 0,
+                        cost: 0,
+                        records: 0
+                    };
+                }
+                
+                projectData[project][employee][periodKey].hours += hours;
+                projectData[project][employee][periodKey].cost += cost;
+                projectData[project][employee][periodKey].records++;
+            });
+            
+            // Sort periods and remove Unknown if there are other periods
+            const sortedPeriods = Array.from(allPeriods).sort();
+            const filteredPeriods = sortedPeriods.filter(p => p !== 'Unknown' || sortedPeriods.length === 1);
+            
+            // If no valid periods found, show a message
+            if (filteredPeriods.length === 0) {
+                return `
+                    <div style="text-align: center; padding: 2rem;">
+                        <h4>👥 Employee ${metric} per ${period} - Project View</h4>
+                        <p>No valid date information found in the selected data. Please check the date format in your data.</p>
+                    </div>
+                `;
+            }
+            
+            let html = controls + `
+                <div>
+                    <h4 style="margin-bottom: 1rem;">👥 Employee ${metric} per ${period} - Project View</h4>
+                    <div style="margin-bottom: 1rem; color: #6b7280;">
+                        <small>Click on project names to expand/collapse employee details</small>
+                    </div>
+            `;
+            
+            // Calculate project totals for sorting
+            const projectTotals = {};
+            Object.entries(projectData).forEach(([project, employees]) => {
+                let totalProjectValue = 0;
+                Object.values(employees).forEach(employeePeriods => {
+                    Object.values(employeePeriods).forEach(periodData => {
+                        totalProjectValue += metric === 'Hours' ? periodData.hours : periodData.cost;
+                    });
+                });
+                projectTotals[project] = totalProjectValue;
+            });
+            
+            // Sort projects by total value (descending)
+            Object.entries(projectData)
+                .sort(([projectA], [projectB]) => projectTotals[projectB] - projectTotals[projectA])
+                .forEach(([project, employees]) => {
+                const totalProjectValue = projectTotals[project];
+                const totalEmployees = Object.keys(employees).length;
+                const totalDisplay = metric === 'Hours' ? 
+                    `${totalProjectValue.toLocaleString()}h` : 
+                    `€${totalProjectValue.toLocaleString()}`;
+                
+                html += `
+                    <div style="margin-bottom: 1rem; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        <div style="background: #f9fafb; padding: 1rem; cursor: pointer; border-radius: 8px 8px 0 0;" onclick="toggleProjectView('hours_${project.replace(/[^a-zA-Z0-9]/g, '_')}')">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <strong>${project}</strong>
+                                <div style="display: flex; gap: 1rem; align-items: center;">
+                                    <span style="color: #6b7280;">${totalEmployees} employees</span>
+                                    <span style="color: ${totalProjectValue >= 0 ? '#059669' : '#dc2626'}; font-weight: 600;">${totalDisplay}</span>
+                                    <span id="toggle_hours_${project.replace(/[^a-zA-Z0-9]/g, '_')}" style="font-size: 1.2rem;">▶</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="hours_${project.replace(/[^a-zA-Z0-9]/g, '_')}" style="display: none; padding: 1rem;">
+                            <div style="overflow-x: auto; max-width: 100%; border: 1px solid #e5e7eb; border-radius: 8px;">
+                                <table style="border-collapse: collapse; font-size: 0.8rem; white-space: nowrap; min-width: 100%;">
+                                    <thead>
+                                        <tr style="background: #f3f4f6;">
+                                            <th style="border: 1px solid #d1d5db; padding: 0.3rem 0.6rem; text-align: left; position: sticky; left: 0; background: #f3f4f6; z-index: 10; min-width: 120px; max-width: 180px;">Employee</th>
+                `;
+                
+                // Add period columns with optimized width
+                filteredPeriods.forEach(periodKey => {
+                    const columnWidth = metric === 'Hours' ? '65px' : '75px';
+                    html += `<th style="border: 1px solid #d1d5db; padding: 0.3rem; text-align: center; min-width: ${columnWidth}; width: ${columnWidth};">${periodKey}</th>`;
+                });
+                
+                html += `
+                                            <th style="border: 1px solid #d1d5db; padding: 0.3rem; text-align: right; background: #f3f4f6; position: sticky; right: 0; z-index: 10; min-width: 90px; box-shadow: -2px 0 4px rgba(0,0,0,0.1);">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                `;
+                
+                // Calculate employee totals for sorting
+                const employeeTotals = {};
+                Object.keys(employees).forEach(employee => {
+                    const total = Object.values(employees[employee]).reduce((sum, period) => {
+                        return sum + (metric === 'Hours' ? period.hours : period.cost);
+                    }, 0);
+                    employeeTotals[employee] = total;
+                });
+                
+                // Sort employees by total
+                Object.keys(employees)
+                    .sort((a, b) => employeeTotals[b] - employeeTotals[a])
+                    .forEach(employee => {
+                        html += `
+                            <tr>
+                                <td style="border: 1px solid #d1d5db; padding: 0.3rem 0.6rem; font-weight: 600; position: sticky; left: 0; background: white; z-index: 5; min-width: 120px; max-width: 180px; box-shadow: 2px 0 4px rgba(0,0,0,0.1);">${employee}</td>
+                        `;
+                        
+                        // Add period values
+                        filteredPeriods.forEach(periodKey => {
+                            const periodData = employees[employee][periodKey];
+                            let value = 0;
+                            let display = '';
+                            
+                            if (periodData) {
+                                value = metric === 'Hours' ? periodData.hours : periodData.cost;
+                                display = metric === 'Hours' ? 
+                                    `${value.toLocaleString()}h` : 
+                                    `€${value.toLocaleString()}`;
+                            }
+                            
+                            const color = value >= 0 ? '#059669' : '#dc2626';
+                            html += `<td style="border: 1px solid #d1d5db; padding: 0.3rem; text-align: right; color: ${color};">${display || '-'}</td>`;
+                        });
+                        
+                        // Add total
+                        const total = employeeTotals[employee];
+                        const totalDisplay = metric === 'Hours' ? 
+                            `${total.toLocaleString()}h` : 
+                            `€${total.toLocaleString()}`;
+                        const totalColor = total >= 0 ? '#059669' : '#dc2626';
+                        html += `<td style="border: 1px solid #d1d5db; padding: 0.3rem; text-align: right; font-weight: 600; color: ${totalColor}; background: #f3f4f6; position: sticky; right: 0; z-index: 5; box-shadow: -2px 0 4px rgba(0,0,0,0.1);">${totalDisplay}</td>`;
+                        
+                        html += `</tr>`;
+                    });
+                
+                html += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `</div>`;
+            return html;
+        }
+        
+        function generateInvoicesPerSupplierView(viewType) {
+            // Get current selections or set defaults
+            const period = window.supplierPeriodSelection || 'Month';
+            // Only cost metric for suppliers (no hours)
+            const metric = 'Cost';
+            
+            if (viewType === 'regular') {
+                return generateRegularSupplierView(period, metric);
+            } else {
+                return generateProjectSupplierView(period, metric);
+            }
+        }
+        
+        function generateRegularSupplierView(period, metric) {
+            // Filter EXT SAP data for suppliers
+            const extSapData = costViewsFilteredData.filter(item => item.source === 'EXT SAP');
+            
+            if (extSapData.length === 0) {
+                return `
+                    <div style="text-align: center; padding: 2rem;">
+                        <h4>🏢 Supplier ${metric} per ${period} - Regular View</h4>
+                        <p>No EXT SAP data available for the selected projects.</p>
+                    </div>
+                `;
+            }
+            
+            // Add period selection controls (no Hours option for suppliers)
+            const controls = `
+                <div style="display: flex; justify-content: center; gap: 2rem; margin-bottom: 2rem; padding: 1rem; background: #f9fafb; border-radius: 8px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">📅 Period:</label>
+                        <select onchange="updateSupplierPeriod(this.value)" style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+                            <option value="Month" ${period === 'Month' ? 'selected' : ''}>Month</option>
+                            <option value="Year" ${period === 'Year' ? 'selected' : ''}>Year</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">📊 Metric:</label>
+                        <select disabled style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px; background: #f3f4f6;">
+                            <option value="Cost" selected>Cost</option>
+                        </select>
+                    </div>
+                </div>
+            `;
+            
+            // Group data by supplier and period
+            const supplierData = {};
+            const allPeriods = new Set();
+            
+            extSapData.forEach(item => {
+                const supplier = item['Name of offsetting account'] || item['CO object name'] || item.supplier || item['Name'] || item.name || 'Unknown Supplier';
+                const cost = parseFloat(item['Value'] || item.value || 0);
+                
+                // Use different fields based on period selection
+                let dateStr = '';
+                if (period === 'Month') {
+                    dateStr = item['Period'] || item.period || '';
+                } else {
+                    dateStr = item['Period'] || item.period || '';
+                }
+                
+                let periodKey = '';
+                if (dateStr) {
+                    let date = null;
+                    
+                    // Handle period numbers (1, 2, 3, 4, etc.)
+                    if (dateStr.match(/^\d+$/)) {
+                        const periodNum = parseInt(dateStr);
+                        if (periodNum >= 1 && periodNum <= 12) {
+                            const currentYear = new Date().getFullYear();
+                            date = new Date(currentYear, periodNum - 1, 1);
+                        }
+                    }
+                    // Try standard date parsing
+                    else {
+                        date = new Date(dateStr);
+                    }
+                    
+                    if (date && !isNaN(date.getTime())) {
+                        if (period === 'Month') {
+                            periodKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                        } else if (period === 'Year') {
+                            periodKey = `${date.getFullYear()}`;
+                        }
+                    }
+                }
+                
+                if (!periodKey) periodKey = 'Unknown';
+                allPeriods.add(periodKey);
+                
+                if (!supplierData[supplier]) {
+                    supplierData[supplier] = {};
+                }
+                
+                if (!supplierData[supplier][periodKey]) {
+                    supplierData[supplier][periodKey] = {
+                        cost: 0,
+                        records: 0
+                    };
+                }
+                
+                supplierData[supplier][periodKey].cost += cost;
+                supplierData[supplier][periodKey].records++;
+            });
+            
+            // Sort periods and remove Unknown if there are other periods
+            const sortedPeriods = Array.from(allPeriods).sort();
+            const filteredPeriods = sortedPeriods.filter(p => p !== 'Unknown' || sortedPeriods.length === 1);
+            
+            // If no valid periods found, show a message
+            if (filteredPeriods.length === 0) {
+                return `
+                    <div style="text-align: center; padding: 2rem;">
+                        <h4>🏢 Supplier ${metric} per ${period} - Regular View</h4>
+                        <p>No valid date information found in the selected data. Please check the date format in your data.</p>
+                    </div>
+                `;
+            }
+            
+            let html = controls + `
+                <div>
+                    <h4 style="margin-bottom: 1rem;">🏢 Supplier ${metric} per ${period} - Regular View</h4>
+                    <div style="overflow-x: auto; max-width: 100%; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        <table style="border-collapse: collapse; font-size: 0.85rem; white-space: nowrap; min-width: 100%;">
+                            <thead>
+                                <tr style="background: #f3f4f6;">
+                                    <th style="border: 1px solid #d1d5db; padding: 0.4rem 0.8rem; text-align: left; position: sticky; left: 0; background: #f3f4f6; z-index: 10; min-width: 150px; max-width: 200px;">Supplier</th>
+            `;
+            
+            // Add period columns
+            filteredPeriods.forEach(periodKey => {
+                html += `<th style="border: 1px solid #d1d5db; padding: 0.4rem; text-align: center; min-width: 80px; width: 80px;">${periodKey}</th>`;
+            });
+            
+            html += `
+                                    <th style="border: 1px solid #d1d5db; padding: 0.4rem; text-align: right; background: #f3f4f6; position: sticky; right: 0; z-index: 10; min-width: 100px; box-shadow: -2px 0 4px rgba(0,0,0,0.1);">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            
+            // Calculate totals for sorting
+            const supplierTotals = {};
+            Object.keys(supplierData).forEach(supplier => {
+                const total = Object.values(supplierData[supplier]).reduce((sum, period) => {
+                    return sum + period.cost;
+                }, 0);
+                supplierTotals[supplier] = total;
+            });
+            
+            // Sort suppliers by total
+            Object.keys(supplierData)
+                .sort((a, b) => supplierTotals[b] - supplierTotals[a])
+                .forEach(supplier => {
+                    html += `
+                        <tr>
+                            <td style="border: 1px solid #d1d5db; padding: 0.4rem 0.8rem; font-weight: 600; position: sticky; left: 0; background: white; z-index: 5; min-width: 150px; max-width: 200px; box-shadow: 2px 0 4px rgba(0,0,0,0.1);">${supplier}</td>
+                    `;
+                    
+                    // Add period values
+                    filteredPeriods.forEach(periodKey => {
+                        const periodData = supplierData[supplier][periodKey];
+                        let value = 0;
+                        let display = '';
+                        
+                        if (periodData) {
+                            value = periodData.cost;
+                            display = `€${value.toLocaleString()}`;
+                        }
+                        
+                        const color = value >= 0 ? '#059669' : '#dc2626';
+                        html += `<td style="border: 1px solid #d1d5db; padding: 0.4rem; text-align: right; color: ${color};">${display || '-'}</td>`;
+                    });
+                    
+                    // Add total
+                    const total = supplierTotals[supplier];
+                    const totalDisplay = `€${total.toLocaleString()}`;
+                    const totalColor = total >= 0 ? '#059669' : '#dc2626';
+                    html += `<td style="border: 1px solid #d1d5db; padding: 0.4rem; text-align: right; font-weight: 600; color: ${totalColor}; background: #f3f4f6; position: sticky; right: 0; z-index: 5; box-shadow: -2px 0 4px rgba(0,0,0,0.1);">${totalDisplay}</td>`;
+                    
+                    html += `</tr>`;
+                });
+            
+            html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+        
+        function generateProjectSupplierView(period, metric) {
+            // Filter EXT SAP data for suppliers
+            const extSapData = costViewsFilteredData.filter(item => item.source === 'EXT SAP');
+            
+            if (extSapData.length === 0) {
+                return `
+                    <div style="text-align: center; padding: 2rem;">
+                        <h4>🏢 Supplier ${metric} per ${period} - Project View</h4>
+                        <p>No EXT SAP data available for the selected projects.</p>
+                    </div>
+                `;
+            }
+            
+            // Add period selection controls (no Hours option for suppliers)
+            const controls = `
+                <div style="display: flex; justify-content: center; gap: 2rem; margin-bottom: 2rem; padding: 1rem; background: #f9fafb; border-radius: 8px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">📅 Period:</label>
+                        <select onchange="updateSupplierPeriod(this.value)" style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+                            <option value="Month" ${period === 'Month' ? 'selected' : ''}>Month</option>
+                            <option value="Year" ${period === 'Year' ? 'selected' : ''}>Year</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">📊 Metric:</label>
+                        <select disabled style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px; background: #f3f4f6;">
+                            <option value="Cost" selected>Cost</option>
+                        </select>
+                    </div>
+                </div>
+            `;
+            
+            // Group by project, then by supplier and period
+            const projectData = {};
+            const allPeriods = new Set();
+            
+            extSapData.forEach(item => {
+                const project = item['CO object name'] || item.projectName || item['WBS Element'] || item.wbs || 'Unknown Project';
+                const supplier = item['Name of offsetting account'] || item['Name'] || item.supplier || item.name || 'Unknown Supplier';
+                const cost = parseFloat(item['Value'] || item.value || 0);
+                
+                // Use Period field for dates
+                const dateStr = item['Period'] || item.period || '';
+                
+                let periodKey = '';
+                if (dateStr) {
+                    let date = null;
+                    
+                    // Handle period numbers (1, 2, 3, 4, etc.)
+                    if (dateStr.match(/^\d+$/)) {
+                        const periodNum = parseInt(dateStr);
+                        if (periodNum >= 1 && periodNum <= 12) {
+                            const currentYear = new Date().getFullYear();
+                            date = new Date(currentYear, periodNum - 1, 1);
+                        }
+                    }
+                    // Try standard date parsing
+                    else {
+                        date = new Date(dateStr);
+                    }
+                    
+                    if (date && !isNaN(date.getTime())) {
+                        if (period === 'Month') {
+                            periodKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                        } else if (period === 'Year') {
+                            periodKey = `${date.getFullYear()}`;
+                        }
+                    }
+                }
+                
+                if (!periodKey) periodKey = 'Unknown';
+                allPeriods.add(periodKey);
+                
+                if (!projectData[project]) {
+                    projectData[project] = {};
+                }
+                
+                if (!projectData[project][supplier]) {
+                    projectData[project][supplier] = {};
+                }
+                
+                if (!projectData[project][supplier][periodKey]) {
+                    projectData[project][supplier][periodKey] = {
+                        cost: 0,
+                        records: 0
+                    };
+                }
+                
+                projectData[project][supplier][periodKey].cost += cost;
+                projectData[project][supplier][periodKey].records++;
+            });
+            
+            // Sort periods and remove Unknown if there are other periods
+            const sortedPeriods = Array.from(allPeriods).sort();
+            const filteredPeriods = sortedPeriods.filter(p => p !== 'Unknown' || sortedPeriods.length === 1);
+            
+            // If no valid periods found, show a message
+            if (filteredPeriods.length === 0) {
+                return `
+                    <div style="text-align: center; padding: 2rem;">
+                        <h4>🏢 Supplier ${metric} per ${period} - Project View</h4>
+                        <p>No valid date information found in the selected data. Please check the date format in your data.</p>
+                    </div>
+                `;
+            }
+            
+            let html = controls + `
+                <div>
+                    <h4 style="margin-bottom: 1rem;">🏢 Supplier ${metric} per ${period} - Project View</h4>
+                    <div style="margin-bottom: 1rem; color: #6b7280;">
+                        <small>Click on project names to expand/collapse supplier details</small>
+                    </div>
+            `;
+            
+            // Calculate project totals for sorting
+            const projectTotals = {};
+            Object.entries(projectData).forEach(([project, suppliers]) => {
+                let totalProjectValue = 0;
+                Object.values(suppliers).forEach(supplierPeriods => {
+                    Object.values(supplierPeriods).forEach(periodData => {
+                        totalProjectValue += periodData.cost;
+                    });
+                });
+                projectTotals[project] = totalProjectValue;
+            });
+            
+            // Sort projects by total cost (descending)
+            Object.entries(projectData)
+                .sort(([projectA], [projectB]) => projectTotals[projectB] - projectTotals[projectA])
+                .forEach(([project, suppliers]) => {
+                const totalProjectValue = projectTotals[project];
+                const totalSuppliers = Object.keys(suppliers).length;
+                const totalDisplay = `€${totalProjectValue.toLocaleString()}`;
+                
+                html += `
+                    <div style="margin-bottom: 1rem; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        <div style="background: #f9fafb; padding: 1rem; cursor: pointer; border-radius: 8px 8px 0 0;" onclick="toggleProjectView('supplier_${project.replace(/[^a-zA-Z0-9]/g, '_')}')">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <strong>${project}</strong>
+                                <div style="display: flex; gap: 1rem; align-items: center;">
+                                    <span style="color: #6b7280;">${totalSuppliers} suppliers</span>
+                                    <span style="color: ${totalProjectValue >= 0 ? '#059669' : '#dc2626'}; font-weight: 600;">${totalDisplay}</span>
+                                    <span id="toggle_supplier_${project.replace(/[^a-zA-Z0-9]/g, '_')}" style="font-size: 1.2rem;">▶</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="supplier_${project.replace(/[^a-zA-Z0-9]/g, '_')}" style="display: none; padding: 1rem;">
+                            <div style="overflow-x: auto; max-width: 100%; border: 1px solid #e5e7eb; border-radius: 8px;">
+                                <table style="border-collapse: collapse; font-size: 0.8rem; white-space: nowrap; min-width: 100%;">
+                                    <thead>
+                                        <tr style="background: #f3f4f6;">
+                                            <th style="border: 1px solid #d1d5db; padding: 0.3rem 0.6rem; text-align: left; position: sticky; left: 0; background: #f3f4f6; z-index: 10; min-width: 120px; max-width: 180px;">Supplier</th>
+                `;
+                
+                // Add period columns
+                filteredPeriods.forEach(periodKey => {
+                    html += `<th style="border: 1px solid #d1d5db; padding: 0.3rem; text-align: center; min-width: 75px; width: 75px;">${periodKey}</th>`;
+                });
+                
+                html += `
+                                            <th style="border: 1px solid #d1d5db; padding: 0.3rem; text-align: right; background: #f3f4f6; position: sticky; right: 0; z-index: 10; min-width: 90px; box-shadow: -2px 0 4px rgba(0,0,0,0.1);">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                `;
+                
+                // Calculate supplier totals for sorting
+                const supplierTotals = {};
+                Object.keys(suppliers).forEach(supplier => {
+                    const total = Object.values(suppliers[supplier]).reduce((sum, period) => {
+                        return sum + period.cost;
+                    }, 0);
+                    supplierTotals[supplier] = total;
+                });
+                
+                // Sort suppliers by total
+                Object.keys(suppliers)
+                    .sort((a, b) => supplierTotals[b] - supplierTotals[a])
+                    .forEach(supplier => {
+                        html += `
+                            <tr>
+                                <td style="border: 1px solid #d1d5db; padding: 0.3rem 0.6rem; font-weight: 600; position: sticky; left: 0; background: white; z-index: 5; min-width: 120px; max-width: 180px; box-shadow: 2px 0 4px rgba(0,0,0,0.1);">${supplier}</td>
+                        `;
+                        
+                        // Add period values
+                        filteredPeriods.forEach(periodKey => {
+                            const periodData = suppliers[supplier][periodKey];
+                            let value = 0;
+                            let display = '';
+                            
+                            if (periodData) {
+                                value = periodData.cost;
+                                display = `€${value.toLocaleString()}`;
+                            }
+                            
+                            const color = value >= 0 ? '#059669' : '#dc2626';
+                            html += `<td style="border: 1px solid #d1d5db; padding: 0.3rem; text-align: right; color: ${color};">${display || '-'}</td>`;
+                        });
+                        
+                        // Add total
+                        const total = supplierTotals[supplier];
+                        const totalDisplay = `€${total.toLocaleString()}`;
+                        const totalColor = total >= 0 ? '#059669' : '#dc2626';
+                        html += `<td style="border: 1px solid #d1d5db; padding: 0.3rem; text-align: right; font-weight: 600; color: ${totalColor}; background: #f3f4f6; position: sticky; right: 0; z-index: 5; box-shadow: -2px 0 4px rgba(0,0,0,0.1);">${totalDisplay}</td>`;
+                        
+                        html += `</tr>`;
+                    });
+                
+                html += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `</div>`;
+            return html;
+        }
+        
+        function switchModalView(cardId, viewType) {
+            console.log(`🔄 Switching modal view for ${cardId} to ${viewType}`);
+            
+            // Update the card's view type
+            cardViewTypes[cardId] = viewType;
+            
+            // Regenerate the content with the new view type
+            generateCostViewContent(cardId, viewType);
+        }
+        
+        function getWeekNumber(date) {
+            const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+            const dayNum = d.getUTCDay() || 7;
+            d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+            return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+        }
+        
+        function updateEmployeePeriod(newPeriod) {
+            window.employeePeriodSelection = newPeriod;
+            // Regenerate the current modal content
+            const currentCardId = 'hours-per-week';
+            const currentViewType = getCardViewType(currentCardId);
+            generateCostViewContent(currentCardId, currentViewType);
+        }
+        
+        function updateEmployeeMetric(newMetric) {
+            window.employeeMetricSelection = newMetric;
+            // Regenerate the current modal content
+            const currentCardId = 'hours-per-week';
+            const currentViewType = getCardViewType(currentCardId);
+            generateCostViewContent(currentCardId, currentViewType);
+        }
+        
+        function updateSupplierPeriod(newPeriod) {
+            window.supplierPeriodSelection = newPeriod;
+            // Regenerate the current modal content
+            const currentCardId = 'invoices-per-supplier';
+            const currentViewType = getCardViewType(currentCardId);
+            generateCostViewContent(currentCardId, currentViewType);
+        }
+        
+        function closeCostViewModal() {
+            document.getElementById('costViewModal').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

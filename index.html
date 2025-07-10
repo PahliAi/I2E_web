@@ -3,14 +3,1705 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>I2E Invoice Processor</title>
-    <meta http-equiv="refresh" content="0; url=I2E_Invoice_Processor.html">
-    <script>
-        // Fallback redirect for browsers that don't support meta refresh
-        window.location.href = "I2E_Invoice_Processor.html";
-    </script>
+    <title>I2E Cost Analysis & Invoice Management</title>
+    
+    <!-- External Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+    
+    <!-- I2E Modules -->
+    <script src="shared/i2e-common.js"></script>
+    <script src="shared/i2e-cache.js"></script>
+    <script src="shared/i2e-spy.js"></script>
+    <script src="shared/pdf-extractor.js"></script>
+    <script src="shared/excel-exporter.js"></script>
+    
+    <!-- Shared Styles -->
+    <link rel="stylesheet" href="assets/i2e-styles.css">
+    
+    <style>
+        /* Custom styles for main dashboard */
+        .dashboard-container {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        
+        .help-button {
+            position: absolute;
+            top: 1px;
+            right: 115px;
+            width: 60px;
+            height: 60px;
+            background: var(--primary-blue);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: var(--shadow-medium);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+        
+        .help-button:hover {
+            background: #1d4ed8;
+            transform: scale(1.1);
+        }
+        
+        .help-button.attention {
+            animation: pulse 2s infinite;
+            background: var(--warning-yellow);
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        .section {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.6rem;
+        }
+        
+        .section.top {
+            flex: 0 0 auto;
+            min-height: 150px;
+        }
+        
+        .section.middle {
+            flex: 0 0 auto;
+            min-height: 200px;
+        }
+        
+        .section.bottom {
+            flex: 0 0 auto;
+            min-height: 200px;
+        }
+        
+        .section-content {
+            width: 100%;
+            max-width: 1000px;
+        }
+        
+        .cache-overview {
+            background: white;
+            border-radius: var(--radius-large);
+            padding: 2rem;
+            box-shadow: var(--shadow-light);
+            border: 1px solid var(--border-gray);
+            margin-bottom: 1rem;
+        }
+        
+        .cache-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-top: 1rem;
+        }
+        
+        .cache-stat-group {
+            background: var(--light-gray);
+            padding: 1.5rem;
+            border-radius: var(--radius-medium);
+            position: relative;
+        }
+        
+        .cache-stat-group h4 {
+            color: var(--primary-blue);
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .stat-item.pending {
+            color: var(--warning-yellow);
+            font-weight: 600;
+        }
+        
+        .stat-item.approved {
+            color: var(--success-green);
+            font-weight: 600;
+        }
+        
+        .stat-item.rejected {
+            color: var(--error-red);
+            font-weight: 600;
+        }
+        
+        .upload-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+        
+        .upload-area {
+            background: white;
+            border: 2px dashed var(--border-gray);
+            border-radius: var(--radius-large);
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .upload-area:hover {
+            border-color: var(--primary-blue);
+            background: var(--light-gray);
+        }
+        
+        .upload-area.drag-over {
+            border-color: var(--success-green);
+            background: #f0f9f5;
+        }
+        
+        .navigation-section {
+            display: flex;
+            justify-content: center;
+            gap: 3rem;
+        }
+        
+        .nav-button {
+            width: 160px;
+            height: 160px;
+            background: white;
+            border: 3px solid var(--border-gray);
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: var(--text-dark);
+            box-shadow: var(--shadow-light);
+        }
+        
+        .nav-button:hover:not(.disabled) {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-medium);
+            border-color: var(--primary-blue);
+        }
+        
+        .nav-button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: #f9f9f9;
+            position: relative;
+        }
+        
+        .nav-button.disabled::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(128, 128, 128, 0.7);
+            border-radius: 50%;
+            z-index: 1;
+        }
+        
+        .nav-button:not(.disabled) {
+            position: relative;
+        }
+        
+        .nav-button:not(.disabled)::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(16, 185, 129, 0.2);
+            border-radius: 50%;
+            z-index: 1;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-button:not(.disabled):hover::after {
+            background: rgba(16, 185, 129, 0.3);
+        }
+        
+        .nav-button .icon,
+        .nav-button .label {
+            position: relative;
+            z-index: 2;
+        }
+        
+        .nav-button .icon {
+            font-size: 36px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .nav-button .label {
+            font-weight: 600;
+            text-align: center;
+            font-size: 0.9rem;
+            line-height: 1.2;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 2rem;
+            border-radius: var(--radius-large);
+            width: 80%;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        }
+        
+        .modal-close {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-dark);
+        }
+        
+        .no-data-message {
+            text-align: center;
+            color: var(--text-dark);
+            font-size: 1.1rem;
+            opacity: 0.8;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .file-list {
+            margin-top: 1rem;
+            text-align: left;
+        }
+        
+        .file-item {
+            background: var(--light-gray);
+            padding: 0.5rem 1rem;
+            margin: 0.5rem 0;
+            border-radius: var(--radius-small);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .file-remove {
+            background: var(--error-red);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .file-info {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--light-gray);
+            border-radius: var(--radius-medium);
+            border: 1px solid var(--border-gray);
+        }
+        
+        .file-status {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .file-status.status-success {
+            color: var(--success-green);
+        }
+        
+        .file-status.status-error {
+            color: var(--error-red);
+        }
+        
+        .file-date {
+            font-size: 0.9rem;
+            color: #6b7280;
+        }
+        
+        /* New Workflow Card Styles */
+        .main-content {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .workflow-card {
+            background: white;
+            border-radius: var(--radius-large);
+            box-shadow: var(--shadow-light);
+            border: 2px solid var(--border-gray);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .workflow-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-medium);
+            border-color: var(--primary-blue);
+        }
+        
+        .workflow-card.selected {
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+        }
+        
+        .card-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(128, 128, 128, 0.5);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 1;
+        }
+        
+        .card-overlay.active {
+            opacity: 1;
+        }
+        
+        .card-header {
+            padding: 1.5rem 1.5rem 1rem;
+            text-align: center;
+            background: var(--light-gray);
+        }
+        
+        .card-icon {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .card-header h2 {
+            margin: 0;
+            color: var(--primary-blue);
+            font-size: 1.3rem;
+        }
+        
+        .card-image {
+            height: 150px;
+            overflow: hidden;
+        }
+        
+        .placeholder-image {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .card-features {
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+        
+        .card-features.collapsed {
+            max-height: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            opacity: 0;
+            margin-top: 0;
+            margin-bottom: 0;
+        }
+        
+        .card-features.expanded {
+            max-height: 500px;
+            padding: 1.5rem;
+            opacity: 1;
+        }
+        
+        .card-features h3 {
+            margin: 0 0 1rem 0;
+            color: var(--text-dark);
+            font-size: 1.1rem;
+        }
+        
+        .card-features ul {
+            margin: 0;
+            padding-left: 1.2rem;
+            list-style-type: none;
+        }
+        
+        .card-features li {
+            margin-bottom: 0.5rem;
+            position: relative;
+            font-size: 0.9rem;
+            color: var(--text-dark);
+        }
+        
+        .card-features li::before {
+            content: "✓";
+            color: var(--success-green);
+            font-weight: bold;
+            position: absolute;
+            left: -1.2rem;
+        }
+        
+        .upload-section {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        
+        .upload-section h3 {
+            text-align: center;
+            color: var(--primary-blue);
+            margin-bottom: 2rem;
+        }
+        
+        .upload-areas-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+        
+        .upload-area {
+            position: relative;
+        }
+        
+        .upload-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border-radius: var(--radius-large);
+            transition: all 0.3s ease;
+            z-index: 1;
+            pointer-events: none;
+        }
+        
+        .upload-overlay.required {
+            background: rgba(16, 185, 129, 0.1);
+            border: 2px dashed var(--success-green);
+        }
+        
+        .upload-overlay.not-required {
+            background: rgba(128, 128, 128, 0.1);
+            border: 2px dashed #9ca3af;
+        }
+        
+        .cached-data {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #f0f9ff;
+            border-radius: var(--radius-medium);
+            border-left: 4px solid var(--primary-blue);
+        }
+        
+        .cached-data h5 {
+            margin: 0 0 0.5rem 0;
+            color: var(--primary-blue);
+            font-size: 0.9rem;
+        }
+        
+        .cached-data p {
+            margin: 0;
+            font-size: 0.8rem;
+            color: #374151;
+        }
+        
+        .continue-section {
+            text-align: center;
+            padding: 1.5rem 2rem;
+        }
+        
+        .continue-button {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, #1d4ed8 100%);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            padding: 1rem 3rem;
+            font-size: 1.2rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 1rem;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+        }
+        
+        .continue-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+        }
+        
+        .continue-button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        .continue-arrow {
+            transition: transform 0.3s ease;
+        }
+        
+        .continue-button:hover:not(:disabled) .continue-arrow {
+            transform: translateX(5px);
+        }
+        
+        /* Responsive design */
+        @media (max-width: 480px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+                padding: 1rem;
+            }
+            
+            .upload-areas-container {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+            
+            .upload-section {
+                padding: 0 1rem;
+            }
+        }
+    </style>
 </head>
 <body>
-    <p>Redirecting to <a href="I2E_Invoice_Processor.html">I2E Invoice Processor</a>...</p>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <div class="header" style="position: relative; background: var(--primary-blue); color: white; padding: 1rem; margin-bottom: 1rem; text-align: center;">
+            <h1 style="margin: 0; font-size: 1.5rem;">Welcome to I2E</h1>
+        </div>
+        
+        <!-- Help Button -->
+        <button class="help-button" id="helpButton" onclick="showHelpModal()" title="Help & Documentation">
+            ❓
+        </button>
+        
+        <!-- Main Content: Three Workflow Cards -->
+        <div class="main-content">
+            <!-- Card 1: Cost Data Analysis -->
+            <div class="workflow-card" id="costAnalysisCard" onclick="selectWorkflow('costAnalysis')">
+                <div class="card-header">
+                    <h2>Cost Data Analysis</h2>
+                </div>
+                <div class="card-image">
+                    <div class="placeholder-image" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); position: relative;">
+                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 3rem;">📈</div>
+                    </div>
+                </div>
+                <div class="card-features">
+                    <h3>Features:</h3>
+                    <ul>
+                        <li>Analyze PPM internal costs</li>
+                        <li>Compare EXT SAP external costs</li>
+                        <li>Generate project-based pivot views</li>
+                        <li>Export detailed cost reports</li>
+                    </ul>
+                </div>
+                <div class="card-overlay" id="costAnalysisOverlay"></div>
+            </div>
+            
+            <!-- Card 2: Invoice Processing -->
+            <div class="workflow-card" id="invoiceProcessingCard" onclick="selectWorkflow('invoiceProcessing')">
+                <div class="card-header">
+                    <h2>Invoice Processing</h2>
+                </div>
+                <div class="card-image">
+                    <div class="placeholder-image" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); position: relative;">
+                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 3rem;">📋</div>
+                    </div>
+                </div>
+                <div class="card-features">
+                    <h3>Features:</h3>
+                    <ul>
+                        <li>Extract data from PDF invoices</li>
+                        <li>Auto-detect VAT patterns and totals</li>
+                        <li>Support multi-page invoices</li>
+                        <li>Export to Excel format</li>
+                    </ul>
+                </div>
+                <div class="card-overlay" id="invoiceProcessingOverlay"></div>
+            </div>
+            
+            <!-- Card 3: Invoice Validation -->
+            <div class="workflow-card" id="invoiceValidationCard" onclick="selectWorkflow('invoiceValidation')">
+                <div class="card-header">
+                    <h2>Invoice Validation</h2>
+                </div>
+                <div class="card-image">
+                    <div class="placeholder-image" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); position: relative;">
+                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 3rem;">🔍</div>
+                    </div>
+                </div>
+                <div class="card-features">
+                    <h3>Features:</h3>
+                    <ul>
+                        <li>Compare invoices against cost data</li>
+                        <li>Validate project codes and amounts</li>
+                        <li>Approve/reject pending invoices</li>
+                        <li>Generate validation reports</li>
+                    </ul>
+                </div>
+                <div class="card-overlay" id="invoiceValidationOverlay"></div>
+            </div>
+        </div>
+        
+        <!-- Upload Areas (Initially Hidden) -->
+        <div class="upload-section" id="uploadSection" style="display: none;">
+            <h3>Upload(s) in green area's required</h3>
+            
+            <div class="upload-areas-container">
+                <!-- Cost Data Upload -->
+                <div class="upload-area" id="costUploadArea" onclick="document.getElementById('costFileInput').click()" 
+                     ondrop="handleDrop(event, 'cost')" ondragover="handleDragOver(event)" 
+                     ondragleave="handleDragLeave(event)">
+                    <div class="upload-overlay" id="costUploadOverlay"></div>
+                    <div class="icon" style="font-size: 36px; color: var(--success-green); margin-bottom: 0.5rem;">📊</div>
+                    <h4>Upload Cost Data</h4>
+                    <p>Excel files (XLSX) containing PPM data, EXT SAP data, or other cost sources</p>
+                    <input type="file" id="costFileInput" class="file-input" accept=".xlsx,.xls" 
+                           multiple onchange="handleFileSelect(event, 'cost')">
+                    <div class="file-list" id="costFileList"></div>
+                    <div class="cached-data" id="costCachedData" style="display: none;"></div>
+                </div>
+                
+                <!-- Invoice Data Upload -->
+                <div class="upload-area" id="invoiceUploadArea" onclick="document.getElementById('invoiceFileInput').click()" 
+                     ondrop="handleDrop(event, 'invoice')" ondragover="handleDragOver(event)" 
+                     ondragleave="handleDragLeave(event)">
+                    <div class="upload-overlay" id="invoiceUploadOverlay"></div>
+                    <div class="icon" style="font-size: 36px; color: var(--primary-blue); margin-bottom: 0.5rem;">📄</div>
+                    <h4>Upload Invoice Data</h4>
+                    <p>PDF files containing invoices to extract and validate against cost data</p>
+                    <input type="file" id="invoiceFileInput" class="file-input" accept=".pdf" 
+                           multiple onchange="handleFileSelect(event, 'invoice')">
+                    <div class="file-list" id="invoiceFileList"></div>
+                    <div class="cached-data" id="invoiceCachedData" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Continue Button -->
+        <div class="continue-section" id="continueSection" style="display: none;">
+            <button class="continue-button" id="continueButton" onclick="proceedWithWorkflow()" disabled>
+                <span class="continue-text">Continue</span>
+                <span class="continue-arrow">→</span>
+            </button>
+        </div>
+    </div>
+    
+    <!-- Help Modal -->
+    <div id="helpModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeHelpModal()">&times;</button>
+            <div id="helpContent">
+                <!-- README content will be loaded here -->
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Global state
+        let selectedFiles = {
+            cost: [],
+            invoice: []
+        };
+        
+        let selectedWorkflow = null;
+        
+        // Initialize dashboard on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeDashboard();
+        });
+        
+        function initializeDashboard() {
+            // Inject spy icon into header
+            injectSpyIcon();
+            updateCacheOverview();
+            updateNavigationButtons();
+            
+            // Don't show cached data until workflow is selected
+            // updateCachedDataDisplay(); 
+            
+            // Check if we should highlight help button
+            const hasAnyData = checkForAnyData();
+            if (!hasAnyData) {
+                document.getElementById('helpButton').classList.add('attention');
+            }
+            
+            // Add hover event listeners to workflow cards
+            setupCardHoverEvents();
+        }
+        
+        function setupCardHoverEvents() {
+            const allCards = ['costAnalysisCard', 'invoiceProcessingCard', 'invoiceValidationCard'];
+            
+            allCards.forEach(cardId => {
+                const card = document.getElementById(cardId);
+                if (card) {
+                    card.addEventListener('mouseenter', function() {
+                        // Only show features on hover if a workflow is selected
+                        if (selectedWorkflow) {
+                            const features = this.querySelector('.card-features');
+                            if (features) {
+                                console.log('Expanding features for:', cardId);
+                                features.classList.remove('collapsed');
+                                features.classList.add('expanded');
+                            }
+                        }
+                    });
+                    
+                    card.addEventListener('mouseleave', function() {
+                        // Only hide features on mouse leave if a workflow is selected
+                        if (selectedWorkflow) {
+                            const features = this.querySelector('.card-features');
+                            if (features) {
+                                console.log('Collapsing features for:', cardId);
+                                features.classList.add('collapsed');
+                                features.classList.remove('expanded');
+                            }
+                        }
+                    });
+                }
+            });
+        }
+        
+        // ===== WORKFLOW SELECTION FUNCTIONS =====
+        function selectWorkflow(workflow) {
+            selectedWorkflow = workflow;
+            
+            // Update card states
+            updateCardStates();
+            
+            // Show upload section
+            showUploadSection();
+            
+            // Update upload area overlays based on workflow
+            updateUploadOverlays();
+            
+            // Update cached data display
+            updateCachedDataDisplay();
+            
+            // Update continue button state
+            updateContinueButton();
+        }
+        
+        function updateCardStates() {
+            // Remove all selected states and overlays
+            document.querySelectorAll('.workflow-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            
+            document.querySelectorAll('.card-overlay').forEach(overlay => {
+                overlay.classList.remove('active');
+            });
+            
+            // Collapse all feature lists
+            document.querySelectorAll('.card-features').forEach(features => {
+                features.classList.add('collapsed');
+                features.classList.remove('expanded');
+            });
+            
+            // Add selected state to chosen card
+            const selectedCard = document.getElementById(selectedWorkflow + 'Card');
+            if (selectedCard) {
+                selectedCard.classList.add('selected');
+            }
+            
+            // Add overlay to non-selected cards
+            const allWorkflows = ['costAnalysis', 'invoiceProcessing', 'invoiceValidation'];
+            allWorkflows.forEach(workflow => {
+                if (workflow !== selectedWorkflow) {
+                    const overlay = document.getElementById(workflow + 'Overlay');
+                    if (overlay) {
+                        overlay.classList.add('active');
+                    }
+                }
+            });
+        }
+        
+        function showUploadSection() {
+            const uploadSection = document.getElementById('uploadSection');
+            const continueSection = document.getElementById('continueSection');
+            
+            uploadSection.style.display = 'block';
+            continueSection.style.display = 'block';
+            
+            // Smooth scroll to upload section
+            uploadSection.scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        function updateUploadOverlays() {
+            const costOverlay = document.getElementById('costUploadOverlay');
+            const invoiceOverlay = document.getElementById('invoiceUploadOverlay');
+            
+            // Remove all overlay classes
+            costOverlay.className = 'upload-overlay';
+            invoiceOverlay.className = 'upload-overlay';
+            
+            // Add appropriate overlays based on workflow
+            switch (selectedWorkflow) {
+                case 'costAnalysis':
+                    costOverlay.classList.add('required');
+                    invoiceOverlay.classList.add('not-required');
+                    break;
+                case 'invoiceProcessing':
+                    costOverlay.classList.add('not-required');
+                    invoiceOverlay.classList.add('required');
+                    break;
+                case 'invoiceValidation':
+                    costOverlay.classList.add('required');
+                    invoiceOverlay.classList.add('required');
+                    break;
+            }
+        }
+        
+        function updateCachedDataDisplay() {
+            const costCachedData = document.getElementById('costCachedData');
+            const invoiceCachedData = document.getElementById('invoiceCachedData');
+            
+            // Only show cached data if upload section is visible
+            const uploadSection = document.getElementById('uploadSection');
+            if (!uploadSection || uploadSection.style.display === 'none') {
+                if (costCachedData) costCachedData.style.display = 'none';
+                if (invoiceCachedData) invoiceCachedData.style.display = 'none';
+                return;
+            }
+            
+            // Update cost data display
+            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            if (costData.length > 0 && costCachedData) {
+                const fileNames = [...new Set(costData.map(item => item.sourceFile || 'Unknown file'))];
+                costCachedData.innerHTML = `
+                    <h5>📊 Cached Cost Data</h5>
+                    <p>${fileNames.slice(0, 3).join(', ')}${fileNames.length > 3 ? ` and ${fileNames.length - 3} more` : ''}</p>
+                `;
+                costCachedData.style.display = 'block';
+            } else if (costCachedData) {
+                costCachedData.style.display = 'none';
+            }
+            
+            // Update invoice data display
+            const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
+            if (pendingInvoices.length > 0 && invoiceCachedData) {
+                invoiceCachedData.innerHTML = `
+                    <h5>📄 Cached Invoice Data</h5>
+                    <p>${pendingInvoices.length} pending invoice${pendingInvoices.length !== 1 ? 's' : ''}</p>
+                `;
+                invoiceCachedData.style.display = 'block';
+            } else if (invoiceCachedData) {
+                invoiceCachedData.style.display = 'none';
+            }
+        }
+        
+        function updateContinueButton() {
+            const continueButton = document.getElementById('continueButton');
+            
+            if (!selectedWorkflow) {
+                continueButton.disabled = true;
+                return;
+            }
+            
+            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
+            const hasUploadedCost = selectedFiles.cost.length > 0;
+            const hasUploadedInvoices = selectedFiles.invoice.length > 0;
+            
+            let isReady = false;
+            
+            switch (selectedWorkflow) {
+                case 'costAnalysis':
+                    isReady = costData.length > 0 || hasUploadedCost;
+                    break;
+                case 'invoiceProcessing':
+                    isReady = pendingInvoices.length > 0 || hasUploadedInvoices;
+                    break;
+                case 'invoiceValidation':
+                    isReady = (costData.length > 0 || hasUploadedCost) && 
+                             (pendingInvoices.length > 0 || hasUploadedInvoices);
+                    break;
+            }
+            
+            continueButton.disabled = !isReady;
+        }
+        
+        function proceedWithWorkflow() {
+            if (!selectedWorkflow) return;
+            
+            switch (selectedWorkflow) {
+                case 'costAnalysis':
+                    window.location.href = 'I2E_Cost_view.html';
+                    break;
+                case 'invoiceProcessing':
+                    window.location.href = 'I2E_Invoice_Processor.html?hideUpload=true';
+                    break;
+                case 'invoiceValidation':
+                    window.location.href = 'I2E_Invoice_Validator.html?view=validation';
+                    break;
+            }
+        }
+        
+        function checkForAnyData() {
+            // Check for cached cost data and invoice data
+            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
+            const approvedInvoices = loadFromLocalStorage('i2e_approved_invoices', []);
+            const rejectedInvoices = loadFromLocalStorage('i2e_rejected_invoices', []);
+            
+            return costData.length > 0 || pendingInvoices.length > 0 || 
+                   approvedInvoices.length > 0 || rejectedInvoices.length > 0;
+        }
+        
+        function updateCacheOverview() {
+            const hasData = checkForAnyData();
+            const cacheOverview = document.getElementById('cacheOverview');
+            const noDataMessage = document.getElementById('noDataMessage');
+            
+            // Only proceed if these elements exist (they don't in the new card-based layout)
+            if (!cacheOverview || !noDataMessage) {
+                // Just update help button state for new layout
+                if (hasData) {
+                    document.getElementById('helpButton').classList.remove('attention');
+                }
+                return;
+            }
+            
+            if (hasData) {
+                cacheOverview.style.display = 'block';
+                noDataMessage.style.display = 'none';
+                document.getElementById('helpButton').classList.remove('attention');
+                
+                // Show cached data message
+                const cachedDataMessage = document.getElementById('cachedDataMessage');
+                if (cachedDataMessage) {
+                    cachedDataMessage.style.display = 'inline';
+                }
+                
+                // Update cost data stats
+                updateCostDataStats();
+                
+                // Update invoice stats
+                updateInvoiceStats();
+            } else {
+                cacheOverview.style.display = 'none';
+                noDataMessage.style.display = 'block';
+                
+                // Hide cached data message
+                const cachedDataMessage = document.getElementById('cachedDataMessage');
+                if (cachedDataMessage) {
+                    cachedDataMessage.style.display = 'none';
+                }
+            }
+        }
+        
+        function updateCostDataStats() {
+            const costDataStats = document.getElementById('costDataStats');
+            if (!costDataStats) return; // Element doesn't exist in new layout
+            
+            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            
+            if (costData.length === 0) {
+                costDataStats.innerHTML = '<div class="stat-item"><span>No cost data uploaded</span></div>';
+                return;
+            }
+            
+            let html = '';
+            const fileGroups = {};
+            let totalRows = 0;
+            
+            // Group by filename and count rows
+            costData.forEach(item => {
+                const filename = item.sourceFile || 'Unknown';
+                if (!fileGroups[filename]) {
+                    fileGroups[filename] = 0;
+                }
+                fileGroups[filename]++;
+                totalRows++;
+            });
+            
+            // Calculate unique rows (deduplicated by WBS + value + month)
+            const uniqueItems = new Set();
+            costData.forEach(item => {
+                const key = `${item.wbs || ''}_${item.value || ''}_${item.month || ''}`;
+                uniqueItems.add(key);
+            });
+            const uniqueRows = uniqueItems.size;
+            
+            // Display file stats with filenames and row counts
+            Object.entries(fileGroups).forEach(([filename, count]) => {
+                // Show just the filename without full path
+                const displayName = filename.split('/').pop().split('\\').pop();
+                html += `<div class="stat-item"><span>${displayName}</span><span>${count} rows</span></div>`;
+            });
+            
+            html += `<div class="stat-item" style="border-top: 1px solid var(--border-gray); margin-top: 0.5rem; padding-top: 0.5rem;"><strong><span>Total</span><span>${totalRows} rows</span></strong></div>`;
+            html += `<div class="stat-item"><strong><span>Deduplicated</span><span>${uniqueRows} rows</span></strong></div>`;
+            
+            // Add Clear Excel Files button in bottom right corner
+            html += `<button onclick="clearExcelCacheWithConfirm()" style="position: absolute; bottom: 1rem; right: 1rem; background: #f59e0b; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 0.9rem;">📊 Clear Excel Files</button>`;
+            
+            costDataStats.innerHTML = html;
+        }
+        
+        function updateInvoiceStats() {
+            const invoiceStats = document.getElementById('invoiceStats');
+            if (!invoiceStats) return; // Element doesn't exist in new layout
+            
+            const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
+            const approvedInvoices = loadFromLocalStorage('i2e_approved_invoices', []);
+            const rejectedInvoices = loadFromLocalStorage('i2e_rejected_invoices', []);
+            
+            const html = `
+                <div class="stat-item pending"><span>Pending</span><span>${pendingInvoices.length}</span></div>
+                <div class="stat-item approved"><span>Approved</span><span>${approvedInvoices.length}</span></div>
+                <div class="stat-item rejected"><span>Rejected</span><span>${rejectedInvoices.length}</span></div>
+            `;
+            
+            invoiceStats.innerHTML = html;
+        }
+        
+        function updateNavigationButtons() {
+            // These navigation buttons don't exist in the new card-based layout
+            // This function is legacy from the old layout, so we'll just return early
+            const costAnalysisButton = document.getElementById('costAnalysisButton');
+            const invoiceToExcelButton = document.getElementById('invoiceToExcelButton');
+            
+            // If these buttons don't exist, we're in the new layout - just return
+            if (!costAnalysisButton || !invoiceToExcelButton) {
+                return;
+            }
+            
+            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
+            const approvedInvoices = loadFromLocalStorage('i2e_approved_invoices', []);
+            const rejectedInvoices = loadFromLocalStorage('i2e_rejected_invoices', []);
+            
+            const hasCostData = costData.length > 0;
+            const hasInvoiceData = pendingInvoices.length > 0 || approvedInvoices.length > 0 || rejectedInvoices.length > 0;
+            
+            // Cost Data Analysis button - needs cost data only
+            if (hasCostData) {
+                costAnalysisButton.classList.remove('disabled');
+            } else {
+                costAnalysisButton.classList.add('disabled');
+            }
+            
+            // Invoice 2 Excel button - needs invoice data only
+            if (hasInvoiceData) {
+                invoiceToExcelButton.classList.remove('disabled');
+            } else {
+                invoiceToExcelButton.classList.add('disabled');
+            }
+            
+            // Invoice Validation button - needs both cost data and invoice data
+            const invoiceValidationButton = document.getElementById('invoiceValidationButton');
+            if (hasCostData && hasInvoiceData) {
+                invoiceValidationButton.classList.remove('disabled');
+            } else {
+                invoiceValidationButton.classList.add('disabled');
+            }
+        }
+        
+        // File handling functions
+        function handleDragOver(event) {
+            event.preventDefault();
+            event.currentTarget.classList.add('drag-over');
+        }
+        
+        function handleDragLeave(event) {
+            event.currentTarget.classList.remove('drag-over');
+        }
+        
+        function handleDrop(event, type) {
+            event.preventDefault();
+            event.currentTarget.classList.remove('drag-over');
+            
+            const files = Array.from(event.dataTransfer.files);
+            addFilesToSelection(files, type);
+        }
+        
+        function handleFileSelect(event, type) {
+            const files = Array.from(event.target.files);
+            addFilesToSelection(files, type);
+        }
+        
+        function addFilesToSelection(files, type) {
+            const validExtensions = type === 'cost' ? ['.xlsx', '.xls'] : ['.pdf'];
+            
+            files.forEach(file => {
+                const extension = '.' + file.name.split('.').pop().toLowerCase();
+                if (validExtensions.includes(extension)) {
+                    selectedFiles[type].push(file);
+                } else {
+                    alert(`Invalid file type: ${file.name}. Expected: ${validExtensions.join(', ')}`);
+                }
+            });
+            
+            updateFileList(type);
+            processFiles(type);
+            
+            // Update continue button state after file selection
+            updateContinueButton();
+        }
+        
+        function updateFileList(type) {
+            const fileList = document.getElementById(type + 'FileList');
+            const files = selectedFiles[type];
+            
+            let html = '';
+            files.forEach((file, index) => {
+                html += `
+                    <div class="file-item">
+                        <span>${file.name}</span>
+                        <button class="file-remove" onclick="removeFile('${type}', ${index})">&times;</button>
+                    </div>
+                `;
+            });
+            
+            fileList.innerHTML = html;
+        }
+        
+        function removeFile(type, index) {
+            selectedFiles[type].splice(index, 1);
+            updateFileList(type);
+            
+            // Update continue button state after file removal
+            updateContinueButton();
+        }
+        
+        function processFiles(type) {
+            if (type === 'cost') {
+                processCostFiles();
+            } else if (type === 'invoice') {
+                processInvoiceFiles();
+            }
+        }
+        
+        async function processCostFiles() {
+            if (selectedFiles.cost.length === 0) return;
+            
+            console.log('Processing cost files:', selectedFiles.cost);
+            showFileProcessingStatus('cost', 'Processing Excel files...');
+            
+            try {
+                // Process each Excel file
+                for (const file of selectedFiles.cost) {
+                    await processSingleCostFile(file);
+                }
+                
+                showFileProcessingStatus('cost', `Successfully processed ${selectedFiles.cost.length} file(s)`, 'success');
+                
+                // Clear selected files
+                selectedFiles.cost = [];
+                updateFileList('cost');
+                updateCacheOverview();
+                updateNavigationButtons();
+                updateCachedDataDisplay();
+                updateContinueButton();
+                
+            } catch (error) {
+                console.error('Error processing cost files:', error);
+                showFileProcessingStatus('cost', 'Error processing files', 'error');
+            }
+        }
+        
+        async function processSingleCostFile(file) {
+            try {
+                const workbook = new ExcelJS.Workbook();
+                await workbook.xlsx.load(await file.arrayBuffer());
+                
+                console.log('📊 Processing file:', file.name);
+                console.log('📊 Available worksheets:', workbook.worksheets.map(ws => ws.name));
+                
+                // Try to find and parse each expected tab
+                const results = {
+                    ppm: null,
+                    extSap: null,
+                    i2e: null
+                };
+                
+                // Look for PPM data
+                const ppmWorksheet = workbook.worksheets.find(ws => 
+                    ws.name.toLowerCase().includes('ppm') && 
+                    ws.name.toLowerCase().includes('details')
+                );
+                
+                if (ppmWorksheet) {
+                    console.log('📊 Found PPM worksheet:', ppmWorksheet.name);
+                    results.ppm = await parsePPMData(ppmWorksheet, file.name);
+                    console.log('📊 PPM data parsed:', results.ppm ? results.ppm.length : 0, 'rows');
+                }
+                
+                // Look for EXT SAP data
+                console.log('📊 Available worksheets:', workbook.worksheets.map(ws => ws.name));
+                const extSapWorksheet = workbook.worksheets.find(ws => {
+                    const name = ws.name.toLowerCase();
+                    return name.includes('ext sap - costs (oe)') ||
+                           name.includes('ext sap') ||
+                           name === 'ext sap' ||
+                           (name.includes('ext') && name.includes('sap')) ||
+                           (name.includes('costs') && name.includes('oe'));
+                });
+                
+                if (extSapWorksheet) {
+                    console.log('📊 Found EXT SAP worksheet:', extSapWorksheet.name);
+                    results.extSap = await parseExtSapData(extSapWorksheet, file.name);
+                    console.log('📊 EXT SAP data parsed:', results.extSap ? results.extSap.length : 0, 'rows');
+                }
+                
+                // Look for I2E data
+                const i2eWorksheet = workbook.worksheets.find(ws => 
+                    ws.name.toLowerCase().includes('invoices') && 
+                    ws.name.toLowerCase().includes('validated')
+                );
+                
+                if (i2eWorksheet) {
+                    console.log('📊 Found I2E worksheet:', i2eWorksheet.name);
+                    results.i2e = await parseI2EData(i2eWorksheet, file.name);
+                    console.log('📊 I2E data parsed:', results.i2e ? results.i2e.length : 0, 'rows');
+                }
+                
+                // Save to cache
+                await saveCostDataToCache(results, file.name);
+                
+            } catch (error) {
+                console.error('Error processing file:', file.name, error);
+                throw error;
+            }
+        }
+        
+        async function parsePPMData(worksheet, sourceFile) {
+            try {
+                const data = [];
+                const rows = worksheet.getSheetValues();
+                
+                console.log('📊 PPM worksheet rows:', rows.length);
+                
+                if (rows.length < 2) return data;
+                
+                // Find header row
+                const headerRow = rows[1];
+                const headers = headerRow ? headerRow.map(h => h ? h.toString().toLowerCase() : '') : [];
+                
+                console.log('📊 PPM headers:', headers);
+                
+                // Find column indices
+                const wbsIndex = headers.findIndex(h => h && h.includes('wbs'));
+                const projectIndex = headers.findIndex(h => h && h.includes('project'));
+                const valueIndex = headers.findIndex(h => h && (h.includes('cost') || h.includes('value')));
+                const monthIndex = headers.findIndex(h => h && (h.includes('month') || h.includes('period')));
+                
+                console.log('📊 PPM column indices:', { wbsIndex, projectIndex, valueIndex, monthIndex });
+                
+                // Process data rows
+                for (let i = 2; i < rows.length; i++) {
+                    const row = rows[i];
+                    if (!row) continue;
+                    
+                    // Create object with original Excel column names
+                    const item = {};
+                    
+                    // Map all columns to their original names
+                    for (let j = 0; j < headerRow.length; j++) {
+                        if (headerRow[j] && row[j] !== undefined) {
+                            item[headerRow[j]] = row[j];
+                        }
+                    }
+                    
+                    // Add metadata
+                    item.source = 'PPM';
+                    item.sourceFile = sourceFile;
+                    item.type = 'Internal';
+                    
+                    // Only add if has essential fields
+                    const wbsValue = (wbsIndex >= 0 && row[wbsIndex]) ? row[wbsIndex].toString() : '';
+                    const costValue = (valueIndex >= 0 && row[valueIndex]) ? parseFloat(row[valueIndex]) || 0 : 0;
+                    
+                    if (wbsValue && costValue !== 0) {
+                        data.push(item);
+                    }
+                }
+                
+                return data;
+            } catch (error) {
+                console.error('Error parsing PPM data:', error);
+                return [];
+            }
+        }
+        
+        async function parseExtSapData(worksheet, sourceFile) {
+            try {
+                const data = [];
+                const rows = worksheet.getSheetValues();
+                
+                console.log('📊 EXT SAP worksheet rows:', rows.length);
+                
+                if (rows.length < 2) return data;
+                
+                // Find header row
+                const headerRow = rows[1];
+                const headers = headerRow ? headerRow.map(h => h ? h.toString().toLowerCase() : '') : [];
+                
+                console.log('📊 EXT SAP headers:', headers);
+                
+                // Find column indices
+                const wbsIndex = headers.findIndex(h => h && h.includes('wbs'));
+                const supplierIndex = headers.findIndex(h => h && (h.includes('supplier') || h.includes('vendor')));
+                // Be more specific for value column to avoid matching "value date"
+                const valueIndex = headers.findIndex(h => h && (h === 'value' || h.includes('amount') || h.includes('cost')));
+                const monthIndex = headers.findIndex(h => h && (h.includes('month') || h.includes('period')));
+                
+                console.log('📊 EXT SAP column indices:', { wbsIndex, supplierIndex, valueIndex, monthIndex });
+                
+                let totalRows = 0;
+                let addedRows = 0;
+                let skippedNoWbs = 0;
+                let skippedZeroValue = 0;
+                
+                // Process data rows
+                for (let i = 2; i < rows.length; i++) {
+                    const row = rows[i];
+                    if (!row) continue;
+                    
+                    totalRows++;
+                    
+                    // Create object with original Excel column names
+                    const item = {};
+                    
+                    // Map all columns to their original names
+                    for (let j = 0; j < headerRow.length; j++) {
+                        if (headerRow[j] && row[j] !== undefined) {
+                            item[headerRow[j]] = row[j];
+                        }
+                    }
+                    
+                    // Add metadata
+                    item.source = 'EXT SAP';
+                    item.sourceFile = sourceFile;
+                    item.type = 'External';
+                    
+                    // Only add if has essential fields
+                    const wbsValue = (wbsIndex >= 0 && row[wbsIndex]) ? row[wbsIndex].toString() : '';
+                    const costValue = (valueIndex >= 0 && row[valueIndex]) ? parseFloat(row[valueIndex]) || 0 : 0;
+                    
+                    // Debug first few rows
+                    if (i <= 5) {
+                        console.log(`🔍 EXT SAP Row ${i-1}: WBS="${wbsValue}", Value="${costValue}", Raw WBS="${row[wbsIndex]}", Raw Value="${row[valueIndex]}", Type of Raw Value="${typeof row[valueIndex]}"`);
+                    }
+                    
+                    if (!wbsValue) {
+                        skippedNoWbs++;
+                    } else if (costValue === 0 || isNaN(costValue)) {
+                        skippedZeroValue++;
+                        // Debug why values are zero
+                        if (i <= 5) {
+                            console.log(`🔍 Skipped Row ${i-1}: costValue=${costValue}, isNaN=${isNaN(costValue)}, Raw="${row[valueIndex]}"`);
+                        }
+                    } else {
+                        data.push(item);
+                        addedRows++;
+                    }
+                }
+                
+                console.log(`📊 EXT SAP parsing summary: ${totalRows} total, ${addedRows} added, ${skippedNoWbs} skipped (no WBS), ${skippedZeroValue} skipped (zero value)`);
+                
+                return data;
+            } catch (error) {
+                console.error('Error parsing EXT SAP data:', error);
+                return [];
+            }
+        }
+        
+        async function parseI2EData(worksheet, sourceFile) {
+            try {
+                const data = [];
+                const rows = worksheet.getSheetValues();
+                
+                if (rows.length < 2) return data;
+                
+                // Find header row
+                const headerRow = rows[1];
+                const headers = headerRow ? headerRow.map(h => h ? h.toString().toLowerCase() : '') : [];
+                
+                // Find column indices
+                const invoiceIndex = headers.findIndex(h => h && h.includes('invoice'));
+                const projectIndex = headers.findIndex(h => h && h.includes('project'));
+                const valueIndex = headers.findIndex(h => h && (h.includes('amount') || h.includes('value')));
+                const monthIndex = headers.findIndex(h => h && (h.includes('month') || h.includes('period')));
+                
+                // Process data rows
+                for (let i = 2; i < rows.length; i++) {
+                    const row = rows[i];
+                    if (!row) continue;
+                    
+                    // Create object with original Excel column names
+                    const item = {};
+                    
+                    // Map all columns to their original names
+                    for (let j = 0; j < headerRow.length; j++) {
+                        if (headerRow[j] && row[j] !== undefined) {
+                            item[headerRow[j]] = row[j];
+                        }
+                    }
+                    
+                    // Add metadata
+                    item.source = 'I2E';
+                    item.sourceFile = sourceFile;
+                    item.type = 'Invoice';
+                    
+                    // Only add if has essential fields
+                    const invoiceValue = (invoiceIndex >= 0 && row[invoiceIndex]) ? row[invoiceIndex].toString() : '';
+                    const costValue = (valueIndex >= 0 && row[valueIndex]) ? parseFloat(row[valueIndex]) || 0 : 0;
+                    
+                    if (invoiceValue && costValue !== 0) {
+                        data.push(item);
+                    }
+                }
+                
+                return data;
+            } catch (error) {
+                console.error('Error parsing I2E data:', error);
+                return [];
+            }
+        }
+        
+        async function saveCostDataToCache(results, sourceFile) {
+            const existingData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            
+            // Add new data
+            if (results.ppm) {
+                existingData.push(...results.ppm);
+            }
+            if (results.extSap) {
+                existingData.push(...results.extSap);
+            }
+            if (results.i2e) {
+                existingData.push(...results.i2e);
+            }
+            
+            // Save to cache
+            saveToLocalStorage('i2e_cost_data_cache', existingData);
+            
+            console.log(`💾 Saved ${existingData.length} cost data entries to cache`);
+        }
+        
+        function showFileProcessingStatus(type, message, status = 'info') {
+            const statusElement = document.getElementById(type + 'FileStatus');
+            const infoElement = document.getElementById(type + 'FileInfo');
+            
+            if (statusElement && infoElement) {
+                statusElement.textContent = message;
+                statusElement.className = `file-status ${status === 'success' ? 'status-success' : status === 'error' ? 'status-error' : ''}`;
+                infoElement.style.display = 'block';
+                
+                const dateElement = document.getElementById(type + 'FileDate');
+                if (dateElement) {
+                    dateElement.textContent = new Date().toLocaleString();
+                }
+            }
+        }
+        
+        async function processInvoiceFiles() {
+            if (selectedFiles.invoice.length === 0) return;
+            
+            console.log('Processing invoice files:', selectedFiles.invoice);
+            showFileProcessingStatus('invoice', 'Processing PDF files...');
+            
+            try {
+                let totalProcessed = 0;
+                let totalAdded = 0;
+                
+                // Process each PDF file
+                for (const file of selectedFiles.invoice) {
+                    try {
+                        console.log(`📄 Processing PDF: ${file.name}`);
+                        
+                        // Extract data from PDF using the shared PDF extractor
+                        const extractedData = await extractDataFromPDF(file);
+                        
+                        if (extractedData && extractedData.length > 0) {
+                            console.log(`📄 Extracted ${extractedData.length} line items from ${file.name}`);
+                            
+                            // Group by invoice number to add unique invoices to pending
+                            const invoiceGroups = {};
+                            extractedData.forEach(item => {
+                                if (item.invoiceNumber && !invoiceGroups[item.invoiceNumber]) {
+                                    invoiceGroups[item.invoiceNumber] = extractedData.filter(r => 
+                                        r.invoiceNumber === item.invoiceNumber
+                                    );
+                                }
+                            });
+                            
+                            // Add each unique invoice to pending cache
+                            Object.values(invoiceGroups).forEach(invoiceData => {
+                                // invoiceData is an array of line items
+                                // Use the first item as the main invoice data structure
+                                const mainInvoiceData = { ...invoiceData[0] };
+                                
+                                // Remove any existing fullInvoiceData to avoid nesting
+                                delete mainInvoiceData.fullInvoiceData;
+                                
+                                // Create proper invoice entry
+                                const invoiceEntry = {
+                                    invoiceNumber: invoiceData[0].invoiceNumber || `INV_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                                    ...mainInvoiceData,
+                                    fullInvoiceData: invoiceData // Complete array for processing
+                                };
+                                
+                                if (addPendingInvoice(invoiceEntry)) {
+                                    totalAdded++;
+                                    console.log('📝 Added to pending cache:', invoiceData[0].invoiceNumber);
+                                }
+                            });
+                            
+                            totalProcessed++;
+                        } else {
+                            console.warn(`📄 No data extracted from ${file.name}`);
+                        }
+                        
+                    } catch (error) {
+                        console.error(`Error processing file ${file.name}:`, error);
+                        // Continue processing other files
+                    }
+                }
+                
+                console.log(`✅ Invoice processing completed: ${totalProcessed} files processed, ${totalAdded} invoices added to pending validation`);
+                
+                showFileProcessingStatus('invoice', `Successfully processed ${totalProcessed} file(s), added ${totalAdded} invoices to cache`, 'success');
+                
+                // Clear selected files
+                selectedFiles.invoice = [];
+                updateFileList('invoice');
+                updateCacheOverview();
+                updateNavigationButtons();
+                updateCachedDataDisplay();
+                updateContinueButton();
+                
+            } catch (error) {
+                console.error('Error processing invoice files:', error);
+                showFileProcessingStatus('invoice', 'Error processing files', 'error');
+            }
+        }
+        
+        // Navigation functions
+        function navigateToCostAnalysis() {
+            const button = document.getElementById('costAnalysisButton');
+            if (!button.classList.contains('disabled')) {
+                // Navigate to separate cost analysis page
+                window.location.href = 'I2E_Cost_view.html';
+            }
+        }
+        
+        function navigateToInvoiceToExcel() {
+            const button = document.getElementById('invoiceToExcelButton');
+            if (!button.classList.contains('disabled')) {
+                // Navigate to invoice processor without upload area
+                window.location.href = 'I2E_Invoice_Processor.html?hideUpload=true';
+            }
+        }
+        
+        function navigateToCostAnalysis() {
+            const button = document.getElementById('costAnalysisButton');
+            if (!button.classList.contains('disabled')) {
+                // Navigate to cost analysis page
+                window.location.href = 'I2E_Cost_view.html';
+            }
+        }
+        
+        function navigateToInvoiceValidation() {
+            const button = document.getElementById('invoiceValidationButton');
+            if (!button.classList.contains('disabled')) {
+                // Navigate to invoice validation page
+                window.location.href = 'I2E_Invoice_Validator.html?view=validation';
+            }
+        }
+        
+        // Help modal functions
+        function showHelpModal() {
+            const modal = document.getElementById('helpModal');
+            const content = document.getElementById('helpContent');
+            
+            // Load README content
+            fetch('README.md')
+                .then(response => response.text())
+                .then(text => {
+                    // Simple markdown to HTML conversion
+                    content.innerHTML = convertMarkdownToHTML(text);
+                    modal.style.display = 'block';
+                })
+                .catch(error => {
+                    content.innerHTML = `
+                        <h2>I2E Cost Analysis & Invoice Management</h2>
+                        <p>Welcome to the I2E system for cost analysis and invoice management.</p>
+                        <h3>Getting Started:</h3>
+                        <ol>
+                            <li><strong>Upload Cost Data:</strong> Upload Excel files containing PPM data, EXT SAP data, or other cost sources</li>
+                            <li><strong>Upload Invoice Data:</strong> Upload PDF invoices to extract and validate</li>
+                            <li><strong>Analyze:</strong> Use the Cost Data Analysis to view expense breakdowns</li>
+                            <li><strong>Approve:</strong> Use Invoice Extraction & Approval to validate and approve invoices</li>
+                        </ol>
+                        <p><em>Could not load README.md file.</em></p>
+                    `;
+                    modal.style.display = 'block';
+                });
+        }
+        
+        function closeHelpModal() {
+            document.getElementById('helpModal').style.display = 'none';
+        }
+        
+        function convertMarkdownToHTML(markdown) {
+            // Basic markdown to HTML conversion
+            return markdown
+                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                .replace(/^- (.*$)/gim, '<li>$1</li>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/\n/g, '<br>');
+        }
+        
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('helpModal');
+            if (event.target === modal) {
+                closeHelpModal();
+            }
+        }
+    </script>
 </body>
 </html>
