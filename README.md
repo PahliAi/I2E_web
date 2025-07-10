@@ -1,6 +1,7 @@
 # I2E Invoice Processor
 
 A client-side PDF invoice data extraction and Excel export tool. This application processes PDF invoices entirely in the browser without requiring server infrastructure or external services.
+Warning: this version is specifically built for 1 company with it's very specific invoice structure and cost excels structure. this toll will not work for any other company without copying the code and customizing it. 
 
 ## Features
 
@@ -11,23 +12,16 @@ A client-side PDF invoice data extraction and Excel export tool. This applicatio
 - Multi-page invoice support with service period extraction
 - Hierarchical data organization by invoice and service period
 - Real-time validation of extracted totals vs calculated line item sums
+- Multi dynamic cost overviews: optionally per project and per year/month/week period
 
 ## Usage
 
 ### Basic Operation
 
-1. Open `I2E_Invoice_Processor.html` in a web browser
-2. Upload PDF invoice files using drag-and-drop or file browser
-3. Click "Process Invoices" to extract data
-4. Review extracted data in the hierarchical table
-5. Configure export fields and export to Excel
-
-### Invoice Validation
-
-1. Open `I2E_Invoice_Validator.html` for reviewing processed invoices
-2. Filter and validate extracted invoice data
-3. Approve or reject invoices based on accuracy
-4. Export validated data to Excel
+1. Open `index.html` in a web browser
+2. Select option Cost Analysis, Invoice 2 Excel or Invoice Validation
+3. Upload PDF invoice files and excel Cost data files using drag-and-drop or file browser
+4. Click "Continue" to visit the selected option page
 
 ## Technical Requirements
 
@@ -39,8 +33,10 @@ A client-side PDF invoice data extraction and Excel export tool. This applicatio
 
 ```
 I2E_web/
-├── I2E_Invoice_Processor.html    # Main processing interface
-├── I2E_Invoice_Validator.html    # Validation interface
+├── index.html                    # Landing page with options and upload area
+├── I2E_Invoice_Processor.html    # Invoice extraction interface
+├── I2E_Invoice_Validator.html    # Invoice validation interface
+├── I2E_Cost_view.html            # Cost view interface (dynamic tables)
 ├── assets/
 │   └── i2e-styles.css           # Shared CSS framework
 └── shared/
@@ -97,7 +93,6 @@ No installation required. Clone or download the repository and open the HTML fil
 ```bash
 git clone <repository-url>
 cd I2E_web
-# Open I2E_Invoice_Processor.html in your browser
 ```
 
 ## Development
