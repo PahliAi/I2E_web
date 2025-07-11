@@ -94,11 +94,11 @@
                                         <th style="width: 40px;">Select</th>
                                         <th onclick="sortTable(1)" style="cursor: pointer; min-width: 120px;">WBS Code</th>
                                         <th onclick="sortTable(2)" style="cursor: pointer; min-width: 200px;">Project Name</th>
-                                        <th onclick="sortTable(3)" style="cursor: pointer; min-width: 120px;">Internal Cost €</th>
-                                        <th onclick="sortTable(4)" style="cursor: pointer; min-width: 120px;">External Cost €</th>
-                                        <th onclick="sortTable(5)" style="cursor: pointer; min-width: 120px;">Total Cost €</th>
-                                        <th onclick="sortTable(6)" style="cursor: pointer; min-width: 130px;">Invoiced Amount €</th>
-                                        <th onclick="sortTable(7)" style="cursor: pointer; min-width: 100px;">Delta €</th>
+                                        <th onclick="sortTable(3)" style="cursor: pointer; min-width: 120px;">Internal Cost</th>
+                                        <th onclick="sortTable(4)" style="cursor: pointer; min-width: 120px;">External Cost</th>
+                                        <th onclick="sortTable(5)" style="cursor: pointer; min-width: 120px;">Total Cost</th>
+                                        <th onclick="sortTable(6)" style="cursor: pointer; min-width: 130px;">Invoiced Amount</th>
+                                        <th onclick="sortTable(7)" style="cursor: pointer; min-width: 100px;">Delta</th>
                                     </tr>
                                 </thead>
                                 <tbody id="validationTableBody">
@@ -1395,18 +1395,19 @@
                 console.log(`✅ Processed ${processedCount} EXT SAP rows (filtered from ${validationData.extSapData.length})`);
             }
             
-            // Process I2E data (invoiced amounts)
-            if (validationData.i2eData) {
-                console.log('🧾 Processing I2E data...');
-                console.log('🧾 I2E columns:', Object.keys(validationData.i2eData[0] || {}));
-                console.log('🧾 I2E sample row:', validationData.i2eData[0]);
+            // Process cached invoice data (invoiced amounts) - use same logic as Pending Invoices tab
+            const cachedInvoices = getAllInvoices(); // Get all cached invoices (pending, approved, rejected)
+            if (cachedInvoices && cachedInvoices.length > 0) {
+                console.log('🧾 Processing cached invoice data...');
+                console.log('🧾 Cached invoices:', cachedInvoices.length);
                 
                 let processedCount = 0;
-                validationData.i2eData.forEach(row => {
-                    // Try different column names for project ID
-                    const wbs = standardizeWBS(row.projectId || row['Project ID'] || row.ProjectID);
+                cachedInvoices.forEach(invoice => {
+                    // Get project ID from invoice
+                    const projectId = getProjectId(invoice);
+                    const wbs = standardizeWBS(projectId);
                     if (!wbs) {
-                        console.log('❌ No project ID found in row (tried: projectId, Project ID, ProjectID):', row);
+                        console.log('❌ No project ID found in cached invoice:', invoice.invoiceNumber);
                         return;
                     }
                     
@@ -1420,13 +1421,13 @@
                         });
                     }
                     
-                    // Try different column names for total amount
-                    let amount = parseFloat(row.positionTotal || row['Total'] || row.Total) || 0;
+                    // Use the same getInvoiceTotal function as Pending Invoices tab
+                    let amount = getInvoiceTotal(invoice);
                     
-                    // Handle credit notes: if this is a credit note and amount is positive, make it negative
-                    const isCreditNote = row.creditNote || row['Credit Note'] || 
-                                        (row['File Name'] && row['File Name'].toLowerCase().includes('credit')) ||
-                                        (row.fileName && row.fileName.toLowerCase().includes('credit'));
+                    // Handle credit notes: check if any line item is a credit note
+                    const isCreditNote = invoice.fullInvoiceData && invoice.fullInvoiceData.some(item => 
+                        item.creditNote || (item.fileName && item.fileName.toLowerCase().includes('credit'))
+                    );
                     
                     if (isCreditNote && amount > 0) {
                         amount = -Math.abs(amount);
@@ -1439,10 +1440,10 @@
                     processedCount++;
                     
                     if (processedCount <= 3) {
-                        console.log(`💵 I2E: WBS ${wbs}, Amount ${amount}${isCreditNote ? ' (Credit Note)' : ''}`);
+                        console.log(`💵 Invoice ${invoice.invoiceNumber}: WBS ${wbs}, Amount ${amount}${isCreditNote ? ' (Credit Note)' : ''}`);
                     }
                 });
-                console.log(`✅ Processed ${processedCount} I2E rows`);
+                console.log(`✅ Processed ${processedCount} cached invoices`);
             }
             
             // Convert to array and calculate deltas

@@ -352,9 +352,9 @@
         /* New Workflow Card Styles */
         .main-content {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 2rem;
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             padding: 2rem;
         }
@@ -379,6 +379,20 @@
         .workflow-card.selected {
             border-color: var(--primary-blue);
             box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+        }
+        
+        .demo-card {
+            border: 2px solid #8b5cf6;
+        }
+        
+        .demo-card:hover {
+            border-color: #7c3aed;
+            box-shadow: 0 8px 25px rgba(139, 92, 246, 0.15);
+        }
+        
+        .demo-card.selected {
+            border-color: #7c3aed;
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
         }
         
         .card-overlay {
@@ -610,7 +624,7 @@
             ❓
         </button>
         
-        <!-- Main Content: Three Workflow Cards -->
+        <!-- Main Content: Four Workflow Cards -->
         <div class="main-content">
             <!-- Card 1: Cost Data Analysis -->
             <div class="workflow-card" id="costAnalysisCard" onclick="selectWorkflow('costAnalysis')">
@@ -676,6 +690,28 @@
                     </ul>
                 </div>
                 <div class="card-overlay" id="invoiceValidationOverlay"></div>
+            </div>
+            
+            <!-- Card 4: DEMO -->
+            <div class="workflow-card demo-card" id="demoCard" onclick="selectWorkflow('demo')">
+                <div class="card-header">
+                    <h2>DEMO</h2>
+                </div>
+                <div class="card-image">
+                    <div class="placeholder-image" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); position: relative;">
+                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 3rem;">🎬</div>
+                    </div>
+                </div>
+                <div class="card-features">
+                    <h3>Features:</h3>
+                    <ul>
+                        <li>Pre-loaded sample data</li>
+                        <li>Full system access instantly</li>
+                        <li>No file upload needed</li>
+                        <li>Try all features</li>
+                    </ul>
+                </div>
+                <div class="card-overlay" id="demoOverlay"></div>
             </div>
         </div>
         
@@ -756,22 +792,19 @@
             // Don't show cached data until workflow is selected
             // updateCachedDataDisplay(); 
             
-            // Check if we should highlight help button
-            const hasAnyData = checkForAnyData();
-            if (!hasAnyData) {
-                document.getElementById('helpButton').classList.add('attention');
-            }
+            // Check cache state and update demo card visibility
+            updateDemoCardVisibility();
             
             // Add hover event listeners to workflow cards
             setupCardHoverEvents();
         }
         
         function setupCardHoverEvents() {
-            const allCards = ['costAnalysisCard', 'invoiceProcessingCard', 'invoiceValidationCard'];
+            const allCards = ['costAnalysisCard', 'invoiceProcessingCard', 'invoiceValidationCard', 'demoCard'];
             
             allCards.forEach(cardId => {
                 const card = document.getElementById(cardId);
-                if (card) {
+                if (card && card.style.display !== 'none') {
                     card.addEventListener('mouseenter', function() {
                         // Only show features on hover if a workflow is selected
                         if (selectedWorkflow) {
@@ -802,6 +835,12 @@
         // ===== WORKFLOW SELECTION FUNCTIONS =====
         function selectWorkflow(workflow) {
             selectedWorkflow = workflow;
+            
+            // Handle demo workflow specially
+            if (workflow === 'demo') {
+                loadDemoData();
+                return;
+            }
             
             // Update card states
             updateCardStates();
@@ -842,7 +881,7 @@
             }
             
             // Add overlay to non-selected cards
-            const allWorkflows = ['costAnalysis', 'invoiceProcessing', 'invoiceValidation'];
+            const allWorkflows = ['costAnalysis', 'invoiceProcessing', 'invoiceValidation', 'demo'];
             allWorkflows.forEach(workflow => {
                 if (workflow !== selectedWorkflow) {
                     const overlay = document.getElementById(workflow + 'Overlay');
@@ -1163,11 +1202,31 @@
             
             files.forEach(file => {
                 const extension = '.' + file.name.split('.').pop().toLowerCase();
-                if (validExtensions.includes(extension)) {
-                    selectedFiles[type].push(file);
-                } else {
+                if (!validExtensions.includes(extension)) {
                     alert(`Invalid file type: ${file.name}. Expected: ${validExtensions.join(', ')}`);
+                    return;
                 }
+                
+                // Check for duplicate file names
+                const isDuplicate = selectedFiles[type].some(existingFile => 
+                    existingFile.name === file.name
+                );
+                
+                if (isDuplicate) {
+                    alert(`File "${file.name}" is already selected. Duplicate files are not allowed.`);
+                    return;
+                }
+                
+                // Check if file with same name already exists in cache
+                if (isFileAlreadyInCache(file.name, type)) {
+                    const confirmReplace = confirm(`File "${file.name}" already exists in cache. Do you want to replace it?`);
+                    if (!confirmReplace) {
+                        return;
+                    }
+                    // If they confirm, we'll process it and it will overwrite in cache
+                }
+                
+                selectedFiles[type].push(file);
             });
             
             updateFileList(type);
@@ -1347,10 +1406,11 @@
                     item.type = 'Internal';
                     
                     // Only add if has essential fields
-                    const wbsValue = (wbsIndex >= 0 && row[wbsIndex]) ? row[wbsIndex].toString() : '';
+                    const wbsValue = (wbsIndex >= 0 && row[wbsIndex]) ? row[wbsIndex].toString().trim() : '';
                     const costValue = (valueIndex >= 0 && row[valueIndex]) ? parseFloat(row[valueIndex]) || 0 : 0;
                     
-                    if (wbsValue && costValue !== 0) {
+                    // Skip rows with empty/meaningless WBS codes or zero cost
+                    if (wbsValue && costValue !== 0 && wbsValue.toLowerCase() !== 'unknown' && wbsValue.toLowerCase() !== 'n/a') {
                         data.push(item);
                     }
                 }
@@ -1414,7 +1474,7 @@
                     item.type = 'External';
                     
                     // Only add if has essential fields
-                    const wbsValue = (wbsIndex >= 0 && row[wbsIndex]) ? row[wbsIndex].toString() : '';
+                    const wbsValue = (wbsIndex >= 0 && row[wbsIndex]) ? row[wbsIndex].toString().trim() : '';
                     const costValue = (valueIndex >= 0 && row[valueIndex]) ? parseFloat(row[valueIndex]) || 0 : 0;
                     
                     // Debug first few rows
@@ -1430,7 +1490,7 @@
                         if (i <= 5) {
                             console.log(`🔍 Skipped Row ${i-1}: costValue=${costValue}, isNaN=${isNaN(costValue)}, Raw="${row[valueIndex]}"`);
                         }
-                    } else {
+                    } else if (wbsValue && costValue !== 0 && wbsValue.toLowerCase() !== 'unknown' && wbsValue.toLowerCase() !== 'n/a') {
                         data.push(item);
                         addedRows++;
                     }
@@ -1693,6 +1753,277 @@
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                 .replace(/\*(.*?)\*/g, '<em>$1</em>')
                 .replace(/\n/g, '<br>');
+        }
+        
+        // ===== DEMO DATA LOADING =====
+        
+        async function loadDemoData() {
+            try {
+                // Show loading state
+                const demoCard = document.getElementById('demoCard');
+                const originalContent = demoCard.innerHTML;
+                demoCard.innerHTML = `
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 2rem;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">⏳</div>
+                        <h3 style="margin: 0 0 0.5rem 0;">Loading Demo Data...</h3>
+                        <p style="margin: 0; color: #666;">Please wait while we prepare the sample files</p>
+                    </div>
+                `;
+                
+                console.log('🎬 Starting demo data load...');
+                
+                // Check if demo data already exists
+                if (isDemoDataAlreadyLoaded()) {
+                    updateDemoCardVisibility();
+                    return;
+                }
+                
+                // Fetch demo files from DEMO folder
+                const demoFiles = {
+                    excel: await fetchDemoFile('DEMO/DEMO_INT_EXT_25.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+                    invoices: [
+                        await fetchDemoFile('DEMO/invoice_1.pdf', 'application/pdf'),
+                        await fetchDemoFile('DEMO/invoice_2.pdf', 'application/pdf'),
+                        await fetchDemoFile('DEMO/invoice_3.pdf', 'application/pdf')
+                    ]
+                };
+                
+                console.log('🎬 Demo files fetched successfully');
+                
+                // Process Excel file (cost data)
+                if (demoFiles.excel) {
+                    selectedFiles.cost = [demoFiles.excel];
+                    await processCostFiles();
+                }
+                
+                // Process invoice files
+                if (demoFiles.invoices.length > 0) {
+                    selectedFiles.invoice = demoFiles.invoices.filter(f => f !== null);
+                    await processInvoiceFiles();
+                }
+                
+                // Mark as demo mode
+                localStorage.setItem('i2e_demo_mode', 'true');
+                
+                console.log('🎬 Demo data loading completed successfully!');
+                
+                // Re-evaluate cache state and update demo card visibility
+                updateDemoCardVisibility();
+                
+            } catch (error) {
+                console.error('🎬 Error loading demo data:', error);
+                
+                // Show error state
+                const demoCard = document.getElementById('demoCard');
+                demoCard.innerHTML = `
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 2rem;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">❌</div>
+                        <h3 style="margin: 0 0 0.5rem 0;">Demo Load Failed</h3>
+                        <p style="margin: 0 0 1rem 0; color: #666; text-align: center;">Could not load demo files.<br>Please try again.</p>
+                        <button onclick="location.reload()" style="background: #ef4444; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;">Retry</button>
+                    </div>
+                `;
+            }
+        }
+        
+        async function fetchDemoFile(path, mimeType) {
+            try {
+                const response = await fetch(path);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch ${path}: ${response.status}`);
+                }
+                
+                const blob = await response.blob();
+                const fileName = path.split('/').pop();
+                
+                return new File([blob], fileName, { type: mimeType });
+            } catch (error) {
+                console.error(`🎬 Error fetching demo file ${path}:`, error);
+                return null;
+            }
+        }
+        
+        function isDemoDataAlreadyLoaded() {
+            // Check if demo mode flag exists
+            const demoModeFlag = localStorage.getItem('i2e_demo_mode');
+            if (!demoModeFlag) return false;
+            
+            // Check if demo files are in cache
+            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
+            
+            // Look for demo file indicators in the data
+            const hasDemoExcel = costData.some(item => 
+                item.sourceFile && item.sourceFile.includes('DEMO_INT_EXT_25.xlsx')
+            );
+            
+            const hasDemoInvoices = pendingInvoices.some(invoice => 
+                invoice.fullInvoiceData && invoice.fullInvoiceData.some(item => 
+                    item.fileName && (item.fileName.includes('invoice_1.pdf') || 
+                                    item.fileName.includes('invoice_2.pdf') || 
+                                    item.fileName.includes('invoice_3.pdf'))
+                )
+            );
+            
+            return hasDemoExcel || hasDemoInvoices;
+        }
+        
+        function updateDemoCardVisibility() {
+            const demoCard = document.getElementById('demoCard');
+            const workflowCardsContainer = document.querySelector('.main-content');
+            
+            // Check cache state
+            const hasUserData = hasNonDemoData();
+            const hasDemoData = hasDemoDataOnly();
+            
+            if (hasUserData) {
+                // Hide demo card and redistribute other 3 cards evenly
+                demoCard.style.display = 'none';
+                workflowCardsContainer.style.gridTemplateColumns = 'repeat(3, 1fr)';
+                workflowCardsContainer.style.maxWidth = '1200px';
+                
+                // Check if we should highlight help button
+                document.getElementById('helpButton').classList.remove('attention');
+            } else if (hasDemoData) {
+                // Show demo card in "already loaded" state
+                demoCard.style.display = 'block';
+                workflowCardsContainer.style.gridTemplateColumns = 'repeat(4, 1fr)';
+                workflowCardsContainer.style.maxWidth = '1400px';
+                showDemoAlreadyLoadedState();
+                
+                // Don't highlight help button
+                document.getElementById('helpButton').classList.remove('attention');
+            } else {
+                // Show demo card in initial form (no data at all)
+                demoCard.style.display = 'block';
+                workflowCardsContainer.style.gridTemplateColumns = 'repeat(4, 1fr)';
+                workflowCardsContainer.style.maxWidth = '1400px';
+                restoreOriginalDemoCard();
+                
+                // Highlight help button
+                document.getElementById('helpButton').classList.add('attention');
+            }
+        }
+        
+        function hasNonDemoData() {
+            // Check for non-demo cost data
+            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            const hasNonDemoCostData = costData.some(item => 
+                !item.sourceFile || !item.sourceFile.includes('DEMO_INT_EXT_25.xlsx')
+            );
+            
+            // Check for non-demo invoice data
+            const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
+            const approvedInvoices = loadFromLocalStorage('i2e_approved_invoices', []);
+            const rejectedInvoices = loadFromLocalStorage('i2e_rejected_invoices', []);
+            
+            const hasNonDemoInvoices = [...pendingInvoices, ...approvedInvoices, ...rejectedInvoices].some(invoice => 
+                !invoice.fullInvoiceData || !invoice.fullInvoiceData.some(item => 
+                    item.fileName && (item.fileName.includes('invoice_1.pdf') || 
+                                    item.fileName.includes('invoice_2.pdf') || 
+                                    item.fileName.includes('invoice_3.pdf'))
+                )
+            );
+            
+            return hasNonDemoCostData || hasNonDemoInvoices;
+        }
+        
+        function hasDemoDataOnly() {
+            // Check if demo mode flag exists
+            const demoModeFlag = localStorage.getItem('i2e_demo_mode');
+            if (!demoModeFlag) return false;
+            
+            // Check if we have demo data but no user data
+            const hasDemoData = isDemoDataAlreadyLoaded();
+            const hasUserData = hasNonDemoData();
+            
+            return hasDemoData && !hasUserData;
+        }
+        
+        function showDemoAlreadyLoadedState() {
+            const demoCard = document.getElementById('demoCard');
+            demoCard.innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 2rem;">
+                    <h3 style="margin: 0 0 0.5rem 0;">Demo Loaded</h3>
+                    <p style="margin: 0 0 1rem 0; color: #666; text-align: center;">Demo data is available.<br>Pick another card and click 'Continue' button.</p>
+                    <button onclick="clearDemoData(event)" style="background: #ef4444; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.9rem;">Clear demo data</button>
+                </div>
+            `;
+            // Remove the click handler to prevent re-loading demo
+            demoCard.setAttribute('onclick', '');
+        }
+        
+        function clearDemoData(event) {
+            try {
+                // Prevent event propagation
+                if (event) {
+                    event.stopPropagation();
+                    event.preventDefault();
+                }
+                
+                // Remove demo mode flag
+                localStorage.removeItem('i2e_demo_mode');
+                
+                // Clear ALL Excel/cost data cache (like clearExcelCacheWithConfirm)
+                localStorage.removeItem('i2e_cost_data_cache');
+                
+                // Clear ALL invoice cache (like clearCacheWithConfirm)
+                localStorage.removeItem('i2e_pending_invoices');
+                localStorage.removeItem('i2e_approved_invoices');
+                localStorage.removeItem('i2e_rejected_invoices');
+                localStorage.removeItem('i2e_user_preferences');
+                
+                console.log('🎬 Demo data cleared successfully');
+                
+                // Simply refresh the page - let initialization handle everything correctly
+                location.reload();
+                
+            } catch (error) {
+                console.error('🎬 Error clearing demo data:', error);
+            }
+        }
+        
+        function restoreOriginalDemoCard() {
+            const demoCard = document.getElementById('demoCard');
+            demoCard.innerHTML = `
+                <div class="card-header">
+                    <h2>DEMO</h2>
+                </div>
+                <div class="card-image">
+                    <div class="placeholder-image" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); position: relative;">
+                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 3rem;">🎬</div>
+                    </div>
+                </div>
+                <div class="card-features">
+                    <h3>Features:</h3>
+                    <ul>
+                        <li>Pre-loaded sample data</li>
+                        <li>Full system access instantly</li>
+                        <li>No file upload needed</li>
+                        <li>Try all features</li>
+                    </ul>
+                </div>
+                <div class="card-overlay" id="demoOverlay"></div>
+            `;
+            // Restore the click handler
+            demoCard.setAttribute('onclick', 'selectWorkflow(\'demo\')');
+        }
+        
+        function isFileAlreadyInCache(fileName, type) {
+            if (type === 'cost') {
+                // Check cost data cache for this file
+                const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
+                return costData.some(item => item.sourceFile === fileName);
+            } else if (type === 'invoice') {
+                // Check pending invoices for this file
+                const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
+                return pendingInvoices.some(invoice => 
+                    invoice.fullInvoiceData && invoice.fullInvoiceData.some(item => 
+                        item.fileName === fileName
+                    )
+                );
+            }
+            return false;
         }
         
         // Close modal when clicking outside

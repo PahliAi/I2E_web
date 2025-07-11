@@ -39,8 +39,7 @@ function addPendingInvoice(invoiceData) {
             invoice.invoiceNumber === invoiceData.invoiceNumber
         );
 
-        console.log('🔍 addPendingInvoice called with:', invoiceData);
-        console.log('🔍 invoiceData.fullInvoiceData:', invoiceData.fullInvoiceData);
+        console.log('🔍 addPendingInvoice called');
         console.log('🔍 invoiceData.fullInvoiceData length:', invoiceData.fullInvoiceData ? invoiceData.fullInvoiceData.length : 'undefined');
         
         // If invoiceData already has fullInvoiceData, use it directly (don't nest it)
@@ -61,7 +60,6 @@ function addPendingInvoice(invoiceData) {
             console.log('🔍 Wrapping single invoiceData in array');
         }
         
-        console.log('🔍 fullInvoiceDataToStore:', fullInvoiceDataToStore);
         console.log('🔍 fullInvoiceDataToStore length:', fullInvoiceDataToStore.length);
 
         const cacheEntry = {
@@ -73,8 +71,6 @@ function addPendingInvoice(invoiceData) {
             validationData: null,
             lastModified: new Date().toISOString()
         };
-        
-        console.log('🔍 Cache entry being stored:', cacheEntry);
 
         if (existingIndex >= 0) {
             // Update existing pending invoice

@@ -195,7 +195,7 @@ function extractServicePeriodFromPage(pageText) {
         }
     }
     
-    console.log(`⚠️ Could not extract service period from page. Text preview: "${pageText.substring(0, 200)}"`);
+    console.log('⚠️ Could not extract service period from page.');
     return 'Unknown Period';
 }
 
@@ -445,7 +445,6 @@ function extractLineItems(pageText, pageNumber) {
     
     console.log(`🔍 Debugging page ${pageNumber} text extraction:`);
     console.log('Raw page text length:', pageText.length);
-    console.log('First 500 chars:', pageText.substring(0, 500));
     
     // Step 1: Filter text to section BEFORE Subtotal/Total boundaries
     const lines = pageText.split('\n');

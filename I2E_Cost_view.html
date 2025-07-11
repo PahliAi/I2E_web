@@ -143,7 +143,10 @@
             const projects = [...new Set(costData.map(item => {
                 // Handle both old and new formats
                 return item['Project Name'] || item.projectName || item['WBS Element ID'] || item.wbs || 'Unknown';
-            }))];
+            }))].filter(project => {
+                // Filter out meaningless project names
+                return project && project.toLowerCase() !== 'unknown' && project.toLowerCase() !== 'n/a' && project.trim() !== '';
+            });
             
             console.log('🔍 Available projects:', projects.slice(0, 10));
             console.log('🔍 Sample cost data item:', costData[0]);
@@ -268,7 +271,8 @@
             costViewsFilteredData = allCostData.filter(item => {
                 // Use the same field name logic as dropdown population
                 const projectName = item['Project Name'] || item.projectName || item['WBS Element ID'] || item.wbs || 'Unknown';
-                return selectedProjects.includes(projectName);
+                // Filter out items with unknown project names
+                return projectName && projectName.toLowerCase() !== 'unknown' && projectName.toLowerCase() !== 'n/a' && selectedProjects.includes(projectName);
             });
             
             console.log('🔍 Filtered cost data:', costViewsFilteredData.length, 'entries');
