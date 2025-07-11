@@ -184,6 +184,12 @@ async function exportToExcelWithFields(data, selectedFields, allFields, filename
             createInvoiceSummarySheet(workbook, data);
         }
         
+        // Create invoice status sheet if status data is available
+        if (selectedFields.includes('approvalStatus') || 
+            data.some(row => row.approvalStatus !== undefined)) {
+            createInvoiceStatusSheet(workbook, data);
+        }
+        
         // Generate filename and save
         const finalFilename = filename || generateFilename('I2E_Selected_Fields');
         await saveWorkbook(workbook, finalFilename);
@@ -283,6 +289,100 @@ function createInvoiceSummarySheet(workbook, data) {
     
     // Add summary filters
     summarySheet.autoFilter = 'A1:D1';
+}
+
+/**
+ * Create invoice status sheet (1 line per invoice with status)
+ * @param {ExcelJS.Workbook} workbook - Workbook instance
+ * @param {Array} data - Invoice data with status information
+ */
+function createInvoiceStatusSheet(workbook, data) {
+    const statusSheet = workbook.addWorksheet('Invoice Status');
+    
+    // Headers for the status sheet
+    const headers = [
+        'Invoice Number', 'Project ID', 'Customer ID', 'Invoice Date', 
+        'Month of Invoice', 'Total Amount', 'Currency', 'Credit Note', 
+        'Status', 'Approval Date', 'Approved/Rejected By', 'Comments', 
+        'Extracted Date', 'Last Modified'
+    ];
+    statusSheet.addRow(headers);
+    
+    // Style headers
+    const headerRow = statusSheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8FAFC' } };
+    
+    // Group data by invoice number to get one line per invoice
+    const invoiceGroups = {};
+    data.forEach(row => {
+        const invoiceNumber = row.invoiceNumber || 'Unknown';
+        if (!invoiceGroups[invoiceNumber]) {
+            // Store the first occurrence of each invoice with its metadata
+            invoiceGroups[invoiceNumber] = {
+                invoiceNumber: invoiceNumber,
+                projectId: row.projectId || '',
+                customerId: row.customerId || '',
+                invoiceDate: row.dateOfInvoice || '',
+                monthOfInvoice: row.monthOfInvoice || '',
+                totalAmount: row.extractedInvoiceTotal || 0,
+                currency: row.currency || 'EUR',
+                creditNote: row.creditNote ? 'Yes' : 'No',
+                status: row.approvalStatus || 'Unknown',
+                approvalDate: row.approvalDate || '',
+                approvedBy: row.approvedBy || '',
+                comments: row.comments || '',
+                extractedDate: row.extractedDate || '',
+                lastModified: row.lastModified || ''
+            };
+        }
+    });
+    
+    // Add data rows (one per invoice)
+    Object.values(invoiceGroups).forEach(invoice => {
+        const dataRow = [
+            invoice.invoiceNumber,
+            invoice.projectId,
+            invoice.customerId,
+            invoice.invoiceDate,
+            invoice.monthOfInvoice,
+            invoice.totalAmount,
+            invoice.currency,
+            invoice.creditNote,
+            invoice.status,
+            invoice.approvalDate,
+            invoice.approvedBy,
+            invoice.comments,
+            invoice.extractedDate,
+            invoice.lastModified
+        ];
+        
+        const excelRow = statusSheet.addRow(dataRow);
+        
+        // Color coding based on status
+        if (invoice.status === 'approved') {
+            excelRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D1FAE5' } }; // Green
+        } else if (invoice.status === 'rejected') {
+            excelRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEE2E2' } }; // Red
+        } else if (invoice.status === 'pending') {
+            excelRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF3C7' } }; // Yellow
+        }
+        
+        // Highlight credit notes with blue background
+        if (invoice.creditNote === 'Yes') {
+            excelRow.getCell(8).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'B0E6FF' } };
+        }
+    });
+    
+    // Auto-fit columns
+    autoFitColumnsWithHeaders(statusSheet, headers);
+    
+    // Format amount column
+    const amountColumn = statusSheet.getColumn(6);
+    amountColumn.numFmt = '#,##0.00';
+    
+    // Add filters
+    statusSheet.autoFilter = 'A1:N1';
 }
 
 /**

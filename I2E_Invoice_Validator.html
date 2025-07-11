@@ -12,6 +12,7 @@
     <script src="shared/i2e-common.js"></script>
     <script src="shared/i2e-cache.js"></script>
     <script src="shared/i2e-spy.js"></script>
+    <script src="shared/excel-exporter.js"></script>
     
     <!-- Shared Styles -->
     <link rel="stylesheet" href="assets/i2e-styles.css">
@@ -21,6 +22,7 @@
         <!-- Header -->
         <div class="header" style="position: relative;">
             <button onclick="window.location.href = 'index.html'" title="Home" style="position: absolute; top: 10px; left: 20px; width: 40px; height: 40px; background: none; border: none; cursor: pointer; opacity: 1.0; transition: opacity 0.3s ease; font-size: 1.5rem;">🏠</button>
+            <button onclick="exportCacheData()" title="Export all cached invoice data to Excel" style="position: absolute; bottom: 10px; right: 20px; padding: 0.5rem 1rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; cursor: pointer; font-size: 0.9rem; transition: all 0.3s ease;">📤 Export your data to Excel</button>
             <h1>I2E Invoice Validator</h1>
             <p>Compare invoiced amounts against internal employee costs and external supplier costs</p>
             
@@ -136,12 +138,12 @@
                                         <th><input type="checkbox" id="selectAllPending" onchange="toggleSelectAllPending()"></th>
                                         <th onclick="sortPendingTable(1)" style="cursor: pointer;">Invoice #</th>
                                         <th onclick="sortPendingTable(2)" style="cursor: pointer;">Project</th>
-                                        <th onclick="sortPendingTable(3)" style="cursor: pointer;">Date</th>
-                                        <th onclick="sortPendingTable(4)" style="cursor: pointer;">Amount</th>
-                                        <th onclick="sortPendingTable(5)" style="cursor: pointer;">Internal Cost</th>
-                                        <th onclick="sortPendingTable(6)" style="cursor: pointer;">External Cost</th>
-                                        <th onclick="sortPendingTable(7)" style="cursor: pointer;">Total Cost</th>
-                                        <th style="min-width: 200px;">Actions</th>
+                                        <th onclick="sortPendingTable(3)" style="cursor: pointer;">Amount</th>
+                                        <th onclick="sortPendingTable(4)" style="cursor: pointer;">Internal Cost</th>
+                                        <th onclick="sortPendingTable(5)" style="cursor: pointer;">External Cost</th>
+                                        <th onclick="sortPendingTable(6)" style="cursor: pointer;">Total Cost</th>
+                                        <th onclick="sortPendingTable(7)" style="cursor: pointer;">Delta</th>
+                                        <th style="min-width: 140px;">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="pendingInvoicesTableBody">
@@ -568,26 +570,40 @@
                 const monthOfInvoice = getMonthOfInvoice(invoice);
                 const sourceText = invoice.source === 'new' ? 'New' : 'Cache';
                 
+                // Check if this is a corrected credit note
+                const isCorrectCreditNote = invoice.fullInvoiceData && invoice.fullInvoiceData.length > 0 && 
+                                          invoice.fullInvoiceData[0].creditNote && 
+                                          invoice.fullInvoiceData[0].isCreditNoteCorrected;
+                
                 // Calculate costs for this invoice based on month filtering
                 const costs = calculateInvoiceCosts(invoice, monthOfInvoice);
                 
+                // Calculate delta (difference between invoice amount and total costs)
+                const delta = invoiceTotal - costs.totalCost;
+                const isDeltaZero = Math.abs(delta) < 0.01; // Consider amounts within 1 cent as zero
+                
+                // Determine row styling (green for zero delta overrides credit note blue)
+                const rowStyle = isDeltaZero ? 
+                    'style="background: #f0fdf4; border-left: 4px solid #10b981;"' : 
+                    (isCorrectCreditNote ? 'style="background: #f0f9ff; border-left: 4px solid #0ea5e9;"' : '');
+                
                 return `
-                    <tr data-invoice="${invoiceNumber}">
+                    <tr data-invoice="${invoiceNumber}" ${rowStyle}>
                         <td>
                             <input type="checkbox" class="invoice-checkbox" value="${invoiceNumber}" onchange="updateSelectedInvoices()">
                         </td>
-                        <td><strong>${invoiceNumber}</strong></td>
+                        <td><strong>${invoiceNumber}</strong>${isCorrectCreditNote && !isDeltaZero ? ' <span style="color: #0ea5e9; font-size: 0.8rem;">📝 Credit Note</span>' : ''}${isDeltaZero ? ' <span style="color: #10b981; font-size: 0.8rem;">✓ Match</span>' : ''}</td>
                         <td>${projectId}</td>
-                        <td>${invoiceDate}</td>
                         <td>${formatCurrency(invoiceTotal)}</td>
                         <td>${formatCurrency(costs.internalCost)}</td>
                         <td>${formatCurrency(costs.externalCost)}</td>
                         <td><strong>${formatCurrency(costs.totalCost)}</strong></td>
+                        <td style="color: ${Math.abs(delta) < 0.01 ? '#059669' : (delta < 0 ? '#dc2626' : 'inherit')}; font-weight: bold;">${formatCurrency(delta)}</td>
                         <td>
                             <div style="display: flex; gap: 0.5rem;">
-                                <button class="btn btn-success" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="handleApproveInvoice('${invoiceNumber}')">✅ Approve</button>
-                                <button class="btn btn-warning" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="handleRejectInvoice('${invoiceNumber}')">❌ Reject</button>
-                                <button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="showInvoiceDetails('${invoiceNumber}')">🔍 Details</button>
+                                <button class="btn btn-success" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="handleApproveInvoice('${invoiceNumber}')">Approve</button>
+                                <button class="btn btn-warning" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="handleRejectInvoice('${invoiceNumber}')">Reject</button>
+                                <button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="showInvoiceDetails('${invoiceNumber}')">Details</button>
                             </div>
                         </td>
                     </tr>
@@ -1007,6 +1023,9 @@
                         
                         // Show success message
                         showNotification(`Invoice ${invoiceNumber} approved successfully`, 'success');
+                        
+                        // Check if we should show export reminder
+                        setTimeout(checkAndShowExportReminder, 500);
                     } else {
                         throw new Error(`Approval function returned: ${result} (expected true). Check cache module and invoice data.`);
                     }
@@ -1040,6 +1059,9 @@
                         
                         // Show success message
                         showNotification(`Invoice ${invoiceNumber} rejected`, 'warning');
+                        
+                        // Check if we should show export reminder
+                        setTimeout(checkAndShowExportReminder, 500);
                     } else {
                         throw new Error(`Rejection function returned: ${result} (expected true). Check cache module and invoice data.`);
                     }
@@ -1121,6 +1143,9 @@
                 validationData.selectedInvoices = [];
                 
                 showNotification(`${successCount} invoices approved successfully`, 'success');
+                
+                // Check if we should show export reminder
+                setTimeout(checkAndShowExportReminder, 500);
             }
         }
 
@@ -1155,6 +1180,9 @@
                 validationData.selectedInvoices = [];
                 
                 showNotification(`${successCount} invoices rejected`, 'warning');
+                
+                // Check if we should show export reminder
+                setTimeout(checkAndShowExportReminder, 500);
             } else if (comments !== null) {
                 alert('Rejection reason is required.');
             }
@@ -1478,10 +1506,10 @@
                 // Color coding based on delta and cost availability
                 if (item.internalCost === 0 && item.externalCost === 0) {
                     row.style.backgroundColor = '#fef3c7'; // Yellow for no costs found
+                } else if (Math.abs(item.delta) < 0.01) {
+                    row.style.backgroundColor = '#d1fae5'; // Green for perfect match (delta = 0)
                 } else if (item.delta < 0) {
-                    row.style.backgroundColor = '#fee2e2'; // Red for over budget
-                } else if (item.delta > 0) {
-                    row.style.backgroundColor = '#d1fae5'; // Green for under budget
+                    row.style.backgroundColor = '#fee2e2'; // Red for negative delta
                 }
                 
                 row.innerHTML = `
@@ -1964,7 +1992,7 @@
                         </div>
                         <div>
                             <strong>Total cost -/- Invoice:</strong><br>
-                            <span style="font-size: 1.1rem; font-weight: bold; color: ${Math.abs(invoiceTotal - costs.totalCost) < 0.01 ? '#059669' : '#dc2626'};">
+                            <span style="font-size: 1.1rem; font-weight: bold; color: ${Math.abs(invoiceTotal - costs.totalCost) < 0.01 ? '#059669' : ((invoiceTotal - costs.totalCost) < 0 ? '#dc2626' : 'inherit')};">
                                 ${invoiceTotal - costs.totalCost >= 0 ? '+' : ''}${formatCurrency(invoiceTotal - costs.totalCost)} EUR
                             </span><br>
                             <small>${Math.abs(invoiceTotal - costs.totalCost) < 0.01 ? 'Match' : 'Variance'}</small>
@@ -2178,11 +2206,12 @@
                                 wbs: rowWbs,
                                 period: period,
                                 fiscalYear: fiscalYear,
-                                costElement: row['Cost Element'] || '-',
-                                costElementName: row['Cost element name'] || '-',
+                                supplier: row['Name of offsetting account'] || '-',
                                 value: parseFloat(row.Value) || 0,
+                                documentDate: row['Document Date'] || '-',
                                 documentType: row['Document type'] || '-',
-                                documentDate: row['Document Date'] || '-'
+                                refDocumentNumber: row['Ref. document number'] || '-',
+                                documentNumber: row['Document Number'] || '-'
                             });
                         }
                     });
@@ -2266,13 +2295,14 @@
                         <table class="data-table" style="min-width: 800px;">
                             <thead>
                                 <tr>
-                                    <th>Cost Element</th>
-                                    <th>Description</th>
-                                    <th>Value €</th>
-                                    <th>Period</th>
                                     <th>Fiscal Year</th>
-                                    <th>Doc Type</th>
+                                    <th>Period</th>
+                                    <th>Supplier</th>
+                                    <th>Value €</th>
                                     <th>Doc Date</th>
+                                    <th>Doc Type</th>
+                                    <th>Ref</th>
+                                    <th>Doc</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -2281,13 +2311,14 @@
                 breakdown.extSapData.forEach(item => {
                     html += `
                         <tr>
-                            <td>${item.costElement}</td>
-                            <td style="max-width: 200px;">${item.costElementName}</td>
-                            <td><strong>${formatCurrency(item.value)}</strong></td>
-                            <td>${item.period}</td>
                             <td>${item.fiscalYear}</td>
+                            <td>${item.period}</td>
+                            <td style="max-width: 200px;">${item.supplier || '-'}</td>
+                            <td><strong>${formatCurrency(item.value)}</strong></td>
+                            <td>${item.documentDate ? item.documentDate.split('T')[0] : '-'}</td>
                             <td>${item.documentType}</td>
-                            <td>${item.documentDate}</td>
+                            <td>${item.refDocumentNumber || '-'}</td>
+                            <td>${item.documentNumber || '-'}</td>
                         </tr>
                     `;
                 });
@@ -2295,7 +2326,7 @@
                 const totalExtSap = breakdown.extSapData.reduce((sum, item) => sum + item.value, 0);
                 html += `
                         <tr style="background-color: #f3f4f6; font-weight: bold;">
-                            <td colspan="2">Total External Cost</td>
+                            <td colspan="3">Total External Cost</td>
                             <td><strong>${formatCurrency(totalExtSap)}</strong></td>
                             <td colspan="4"></td>
                         </tr>
@@ -2736,7 +2767,101 @@
         
         // Make debug function globally available
         window.debugValidatorCacheData = debugValidatorCacheData;
+        
+        // ===== CACHE EXPORT FUNCTION =====
+        
+        function exportCacheData() {
+            try {
+                const exportData = exportCacheToExcel();
+                if (exportData.length === 0) {
+                    alert('No cache data to export.');
+                    return;
+                }
+                
+                // Define basic field definitions for the export
+                const basicFields = {
+                    'invoiceNumber': { name: 'Invoice Number' },
+                    'projectId': { name: 'Project ID' },
+                    'customerId': { name: 'Customer ID' },
+                    'dateOfInvoice': { name: 'Invoice Date' },
+                    'monthOfInvoice': { name: 'Month of Invoice' },
+                    'positionTotal': { name: 'Position Total' },
+                    'approvalStatus': { name: 'Approval Status' },
+                    'approvalDate': { name: 'Approval Date' },
+                    'approvedBy': { name: 'Approved By' },
+                    'comments': { name: 'Comments' }
+                };
+                
+                // Get available fields from the export data
+                const availableFields = exportData.length > 0 ? Object.keys(exportData[0]) : [];
+                const fieldKeys = availableFields.filter(key => basicFields[key] || key === 'approvalStatus');
+                
+                // Use the enhanced export functionality with status sheet
+                exportToExcelWithFields(exportData, fieldKeys, basicFields, 'I2E_Cache_Export');
+                
+                console.log(`✅ Cache exported: ${exportData.length} line items`);
+                
+            } catch (error) {
+                console.error('Error exporting cache:', error);
+                alert('Error exporting cache data. Please try again.');
+            }
+        }
+        
+        // Make export function globally available
+        window.exportCacheData = exportCacheData;
+        
+        // ===== NO PENDING INVOICES MODAL =====
+        
+        function checkAndShowExportReminder() {
+            const pendingInvoices = getPendingInvoices();
+            const approvedInvoices = getApprovedInvoices();
+            const rejectedInvoices = getRejectedInvoices();
+            
+            // Show reminder if no pending invoices but have approved/rejected invoices
+            if (pendingInvoices.length === 0 && (approvedInvoices.length > 0 || rejectedInvoices.length > 0)) {
+                showExportReminderModal();
+            }
+        }
+        
+        function showExportReminderModal() {
+            const modal = document.getElementById('exportReminderModal');
+            if (modal) {
+                modal.style.display = 'block';
+            }
+        }
+        
+        function closeExportReminderModal() {
+            const modal = document.getElementById('exportReminderModal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+        
+        // Export reminder is triggered after approval/rejection actions, not on page load
 
     </script>
+    
+    <!-- Export Reminder Modal -->
+    <div id="exportReminderModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 500px; text-align: center;">
+            <div class="modal-header">
+                <h2 class="modal-title">🎉 All Invoices Validated!</h2>
+            </div>
+            <div style="padding: 2rem;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">✅</div>
+                <p style="font-size: 1.1rem; margin-bottom: 2rem; line-height: 1.6;">
+                    You have validated all invoices! Make sure to export your data to Excel to preserve your work.
+                </p>
+                <div style="display: flex; gap: 1rem; justify-content: center;">
+                    <button class="btn btn-primary" onclick="exportCacheData(); closeExportReminderModal();" style="padding: 0.75rem 1.5rem;">
+                        📤 Export your data to Excel
+                    </button>
+                    <button class="btn" onclick="closeExportReminderModal()" style="padding: 0.75rem 1.5rem;">
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

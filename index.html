@@ -1627,23 +1627,25 @@
                             
                             // Add each unique invoice to pending cache
                             Object.values(invoiceGroups).forEach(invoiceData => {
-                                // invoiceData is an array of line items
+                                // Apply credit note correction before storing
+                                const correctedInvoiceData = correctCreditNoteAmounts(invoiceData);
+                                
                                 // Use the first item as the main invoice data structure
-                                const mainInvoiceData = { ...invoiceData[0] };
+                                const mainInvoiceData = { ...correctedInvoiceData[0] };
                                 
                                 // Remove any existing fullInvoiceData to avoid nesting
                                 delete mainInvoiceData.fullInvoiceData;
                                 
-                                // Create proper invoice entry
+                                // Create proper invoice entry with corrected data
                                 const invoiceEntry = {
-                                    invoiceNumber: invoiceData[0].invoiceNumber || `INV_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                                    invoiceNumber: correctedInvoiceData[0].invoiceNumber || `INV_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                                     ...mainInvoiceData,
-                                    fullInvoiceData: invoiceData // Complete array for processing
+                                    fullInvoiceData: correctedInvoiceData // Complete array with corrections
                                 };
                                 
                                 if (addPendingInvoice(invoiceEntry)) {
                                     totalAdded++;
-                                    console.log('📝 Added to pending cache:', invoiceData[0].invoiceNumber);
+                                    console.log('📝 Added to pending cache:', correctedInvoiceData[0].invoiceNumber);
                                 }
                             });
                             
@@ -1673,6 +1675,57 @@
             } catch (error) {
                 console.error('Error processing invoice files:', error);
                 showFileProcessingStatus('invoice', 'Error processing files', 'error');
+            }
+        }
+        
+        // Credit note correction function (copied from Invoice Processor)
+        function correctCreditNoteAmounts(invoiceItems) {
+            if (!invoiceItems || invoiceItems.length === 0) return invoiceItems;
+            
+            // Check if this is a credit note by examining the first item
+            const firstItem = invoiceItems[0];
+            const isCreditNote = firstItem.creditNote;
+            
+            if (!isCreditNote) {
+                return invoiceItems; // Not a credit note, return unchanged
+            }
+            
+            console.log('🔍 Checking credit note for amount correction:', firstItem.invoiceNumber);
+            
+            // Check if ALL line items have positive amounts
+            const allPositive = invoiceItems.every(item => {
+                const amount = item.positionTotal || 0;
+                return amount > 0;
+            });
+            
+            if (allPositive) {
+                console.log('🔄 Credit note with all positive amounts detected. Converting to negative amounts.');
+                console.log('Before correction:', invoiceItems.map(item => ({
+                    positionTotal: item.positionTotal,
+                    unitPrice: item.unitPrice,
+                    extractedInvoiceTotal: item.extractedInvoiceTotal
+                })));
+                
+                // Make all amounts negative and mark as corrected
+                const correctedItems = invoiceItems.map(item => ({
+                    ...item,
+                    positionTotal: -(Math.abs(item.positionTotal || 0)),
+                    unitPrice: -(Math.abs(item.unitPrice || 0)),
+                    extractedInvoiceTotal: -(Math.abs(item.extractedInvoiceTotal || 0)),
+                    isCreditNoteCorrected: true // Flag to identify corrected items for styling
+                }));
+                
+                console.log('After correction:', correctedItems.map(item => ({
+                    positionTotal: item.positionTotal,
+                    unitPrice: item.unitPrice,
+                    extractedInvoiceTotal: item.extractedInvoiceTotal,
+                    isCreditNoteCorrected: item.isCreditNoteCorrected
+                })));
+                
+                return correctedItems;
+            } else {
+                console.log('✅ Credit note already has mixed positive/negative amounts. No correction needed.');
+                return invoiceItems; // Already has negative amounts, no correction needed
             }
         }
         
@@ -1917,13 +1970,29 @@
             const approvedInvoices = loadFromLocalStorage('i2e_approved_invoices', []);
             const rejectedInvoices = loadFromLocalStorage('i2e_rejected_invoices', []);
             
-            const hasNonDemoInvoices = [...pendingInvoices, ...approvedInvoices, ...rejectedInvoices].some(invoice => 
-                !invoice.fullInvoiceData || !invoice.fullInvoiceData.some(item => 
-                    item.fileName && (item.fileName.includes('invoice_1.pdf') || 
-                                    item.fileName.includes('invoice_2.pdf') || 
-                                    item.fileName.includes('invoice_3.pdf'))
-                )
-            );
+            const hasNonDemoInvoices = [...pendingInvoices, ...approvedInvoices, ...rejectedInvoices].some(invoice => {
+                // Check if invoice has fullInvoiceData (pending invoices)
+                if (invoice.fullInvoiceData && Array.isArray(invoice.fullInvoiceData)) {
+                    // Check if ALL items in this invoice are from demo files
+                    const allItemsAreDemo = invoice.fullInvoiceData.every(item => 
+                        item.fileName && (item.fileName.includes('invoice_1.pdf') || 
+                                        item.fileName.includes('invoice_2.pdf') || 
+                                        item.fileName.includes('invoice_3.pdf'))
+                    );
+                    return !allItemsAreDemo;
+                }
+                
+                // Check if invoice has summary data (approved/rejected invoices)
+                if (invoice.summary && invoice.summary.fileName) {
+                    const isDemoFile = invoice.summary.fileName.includes('invoice_1.pdf') || 
+                                     invoice.summary.fileName.includes('invoice_2.pdf') || 
+                                     invoice.summary.fileName.includes('invoice_3.pdf');
+                    return !isDemoFile;
+                }
+                
+                // If we can't determine, assume it's demo data to be safe
+                return false;
+            });
             
             return hasNonDemoCostData || hasNonDemoInvoices;
         }

@@ -42,6 +42,14 @@ function addPendingInvoice(invoiceData) {
         console.log('🔍 addPendingInvoice called');
         console.log('🔍 invoiceData.fullInvoiceData length:', invoiceData.fullInvoiceData ? invoiceData.fullInvoiceData.length : 'undefined');
         
+        // Debug credit note amounts
+        if (invoiceData.fullInvoiceData && invoiceData.fullInvoiceData.length > 0) {
+            const firstItem = invoiceData.fullInvoiceData[0];
+            if (firstItem.creditNote) {
+                console.log('💾 Credit note stored:', firstItem.invoiceNumber, 'Corrected:', firstItem.isCreditNoteCorrected);
+            }
+        }
+        
         // If invoiceData already has fullInvoiceData, use it directly (don't nest it)
         // If invoiceData is an array, use it as the line items
         // If invoiceData is a single object without fullInvoiceData, wrap it in array

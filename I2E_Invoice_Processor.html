@@ -25,6 +25,7 @@
         <!-- Header -->
         <div class="header" style="position: relative;">
             <button onclick="window.location.href = 'index.html'" title="Home" style="position: absolute; top: 10px; left: 20px; width: 40px; height: 40px; background: none; border: none; cursor: pointer; opacity: 1.0; transition: opacity 0.3s ease; font-size: 1.5rem;">🏠</button>
+            <button onclick="exportCacheData()" title="Export all cached invoice data to Excel" style="position: absolute; bottom: 10px; right: 20px; padding: 0.5rem 1rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; cursor: pointer; font-size: 0.9rem; transition: all 0.3s ease;">📤 Export your data to Excel</button>
             <h1>I2E Invoice Processor</h1>
             <p>Zero-cost, frontend-only PDF invoice data extraction to Excel</p>
             
@@ -652,14 +653,17 @@
                         let addedCount = 0;
                         
                         // Group by invoice number to add unique invoices to pending
+                        // Use extractedData (corrected amounts) instead of result (original amounts)
                         const invoiceGroups = {};
-                        result.forEach(item => {
+                        extractedData.forEach(item => {
                             if (item.invoiceNumber && !invoiceGroups[item.invoiceNumber]) {
-                                invoiceGroups[item.invoiceNumber] = result.filter(r => 
+                                invoiceGroups[item.invoiceNumber] = extractedData.filter(r => 
                                     r.invoiceNumber === item.invoiceNumber
                                 );
                             }
                         });
+                        
+                        console.log('💾 Using corrected amounts for cache storage:', Object.keys(invoiceGroups).length, 'invoices');
                         
                         // Add each unique invoice to pending cache
                         Object.values(invoiceGroups).forEach(invoiceData => {
@@ -798,15 +802,29 @@
             
             if (allPositive) {
                 console.log('🔄 Credit note with all positive amounts detected. Converting to negative amounts.');
+                console.log('Before correction:', invoiceItems.map(item => ({
+                    positionTotal: item.positionTotal,
+                    unitPrice: item.unitPrice,
+                    extractedInvoiceTotal: item.extractedInvoiceTotal
+                })));
                 
                 // Make all amounts negative and mark as corrected
-                return invoiceItems.map(item => ({
+                const correctedItems = invoiceItems.map(item => ({
                     ...item,
                     positionTotal: -(Math.abs(item.positionTotal || 0)),
                     unitPrice: -(Math.abs(item.unitPrice || 0)),
                     extractedInvoiceTotal: -(Math.abs(item.extractedInvoiceTotal || 0)), // Also fix the invoice total
                     isCreditNoteCorrected: true // Flag to identify corrected items for styling
                 }));
+                
+                console.log('After correction:', correctedItems.map(item => ({
+                    positionTotal: item.positionTotal,
+                    unitPrice: item.unitPrice,
+                    extractedInvoiceTotal: item.extractedInvoiceTotal,
+                    isCreditNoteCorrected: item.isCreditNoteCorrected
+                })));
+                
+                return correctedItems;
             } else {
                 console.log('✅ Credit note already has mixed positive/negative amounts. No correction needed.');
                 return invoiceItems; // Already has negative amounts, no correction needed

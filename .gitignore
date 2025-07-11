@@ -1,8 +1,10 @@
+# Archive folder containing development files
+/archive/
+/LOG/
+/design/
+
 # Node modules (if any)
 node_modules/
-
-# No MD files
-.md
 
 # Environment variables
 .env
@@ -30,3 +32,7 @@ npm-debug.log*
 # Temporary files
 *.tmp
 *.temp
+
+# JSON files and helper python scripts
+*.json
+*.py
