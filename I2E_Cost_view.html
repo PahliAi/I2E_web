@@ -284,11 +284,11 @@
                     enabled: true
                 },
                 {
-                    id: 'coming-soon-1',
-                    icon: '❔',
-                    title: 'Your input is appreciated ...',
-                    status: 'Coming Soon',
-                    enabled: false
+                    id: 'rtc-ctc-per-rm',
+                    icon: '🛠️',
+                    title: 'RTC/CTC per RM',
+                    status: 'Ready',
+                    enabled: true
                 },
                 {
                     id: 'coming-soon-2',
@@ -436,19 +436,31 @@
         }
         
         function toggleProjectView(projectId) {
-            const content = document.getElementById(projectId);
+            // Handle multiple elements with the same ID (RTC/CTC details)
+            const elements = document.querySelectorAll(`[id="${projectId}"]`);
             const toggle = document.getElementById(`toggle_${projectId}`);
             
-            if (!content || !toggle) return;
+            if (elements.length === 0 || !toggle) return;
             
-            const isExpanded = content.style.display !== 'none';
+            const isExpanded = elements[0].style.display !== 'none';
+            
+            // Add smooth animation and arrow rotation
+            elements.forEach(element => {
+                if (isExpanded) {
+                    element.style.display = 'none';
+                } else {
+                    element.style.display = 'table-row';
+                }
+            });
             
             if (isExpanded) {
-                content.style.display = 'none';
                 toggle.textContent = '▶';
+                toggle.style.transform = 'rotate(0deg)';
+                toggle.style.color = toggle.style.color; // Keep original color
             } else {
-                content.style.display = 'block';
                 toggle.textContent = '▼';
+                toggle.style.transform = 'rotate(90deg)';
+                toggle.style.color = '#059669'; // Green when expanded
             }
         }
         
@@ -506,6 +518,7 @@
             const titles = {
                 'hours-per-week': '👥 Internal Hours/Costs',
                 'invoices-per-supplier': '🏢 Supplier Cost per Period',
+                'rtc-ctc-per-rm': '🛠️ RTC/CTC per RM',
                 'cost-by-project': '📊 Cost by Project',
                 'monthly-trends': '📈 Monthly Cost Trends',
                 'employee-utilization': '👥 Employee Utilization',
@@ -560,6 +573,9 @@
                     break;
                 case 'invoices-per-supplier':
                     contentElement.innerHTML = toggleControls + generateInvoicesPerSupplierView(viewType);
+                    break;
+                case 'rtc-ctc-per-rm':
+                    contentElement.innerHTML = toggleControls + generateRtcCtcPerRmView(viewType);
                     break;
                 default:
                     contentElement.innerHTML = toggleControls + `
@@ -1637,6 +1653,578 @@
             window.supplierPeriodSelection = newPeriod;
             // Regenerate the current modal content
             const currentCardId = 'invoices-per-supplier';
+            const currentViewType = getCardViewType(currentCardId);
+            generateCostViewContent(currentCardId, currentViewType);
+        }
+        
+        // RTC/CTC per RM functions
+        function generateRtcCtcPerRmView(viewType) {
+            // Get current selections or set defaults  
+            const period = window.rmPeriodSelection || 'Month';
+            const metric = window.rmMetricSelection || 'Hours %';
+            
+            if (viewType === 'regular') {
+                return generateRegularRmView(period, metric);
+            } else {
+                return generateProjectRmView(period, metric);
+            }
+        }
+        
+        function generateRegularRmView(period, metric) {
+            // Filter PPM data for Resource Manager analysis
+            const ppmData = costViewsFilteredData.filter(item => item.source === 'PPM');
+            
+            if (ppmData.length === 0) {
+                return `
+                    <div style="text-align: center; padding: 2rem;">
+                        <h4>RTC/CTC ${metric} per ${period}</h4>
+                        <p>No PPM data available for the selected projects.</p>
+                    </div>
+                `;
+            }
+            
+            // Get current selections or set defaults
+            const rmFilter = window.resourceManagerSelection || '';
+            
+            // Updated metric options with percentages as default
+            const controls = `
+                <div style="display: flex; justify-content: center; gap: 2rem; margin-bottom: 2rem; padding: 1rem; background: #f9fafb; border-radius: 8px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">📅 Period:</label>
+                        <select onchange="updateRmPeriod(this.value)" style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+                            <option value="Week" ${period === 'Week' ? 'selected' : ''}>Week</option>
+                            <option value="Month" ${period === 'Month' ? 'selected' : ''}>Month</option>
+                            <option value="Year" ${period === 'Year' ? 'selected' : ''}>Year</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">📊 Metric:</label>
+                        <select onchange="updateRmMetric(this.value)" style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+                            <option value="Hours" ${metric === 'Hours' ? 'selected' : ''}>Hours</option>
+                            <option value="Hours %" ${metric === 'Hours %' ? 'selected' : ''}>Hours %</option>
+                            <option value="Cost" ${metric === 'Cost' ? 'selected' : ''}>Cost</option>
+                            <option value="Cost %" ${metric === 'Cost %' ? 'selected' : ''}>Cost %</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">👤 Resource Manager:</label>
+                        <select onchange="updateResourceManager(this.value)" style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px; min-width: 150px;">
+                            <option value="">All Managers</option>
+                            ${getResourceManagerOptions(ppmData, rmFilter)}
+                        </select>
+                    </div>
+                </div>
+            `;
+            
+            // Filter by Resource Manager if selected
+            let filteredData = ppmData;
+            if (rmFilter) {
+                filteredData = ppmData.filter(item => {
+                    const rm = item['Resource Manager'] || item.resourceManager || item['Manager'] || item.manager || '';
+                    return rm.toLowerCase().includes(rmFilter.toLowerCase());
+                });
+            }
+            
+            // Group data by User and period, separated by RTC/CTC project type
+            const userData = {};
+            const allPeriods = new Set();
+            const periodTotals = {}; // For percentage calculations
+            
+            filteredData.forEach(item => {
+                const user = item.User || item.user || 'Unknown Employee';
+                const projectType = (item['Project Type'] || item.projectType || item['Type'] || item.type || 'Unknown Type').toUpperCase();
+                const cost = parseFloat(item['Cost €'] || item.value || 0);
+                const hours = parseFloat(item['Total'] || item.total || 0);
+                
+                // Determine if it's RTC or CTC based on project type
+                const isRTC = projectType.includes('RTC') || projectType.includes('RUNNING');
+                const isCTC = projectType.includes('CTC') || projectType.includes('CHANG');
+                
+                // If we can't determine, classify based on common patterns
+                let type;
+                if (isRTC) type = 'RTC';
+                else if (isCTC) type = 'CTC';
+                else {
+                    // Default classification logic - you may want to adjust this
+                    type = projectType.includes('MAINTENANCE') || projectType.includes('SUPPORT') || projectType.includes('OPERATIONS') ? 'RTC' : 'CTC';
+                }
+                
+                // Parse date for period
+                let dateStr = '';
+                if (period === 'Week') {
+                    dateStr = item['Week starts on'] || item.weekStartsOn || item.week || '';
+                } else {
+                    dateStr = item['Month of invoice'] || item.month || item['Month'] || item['Period'] || item.period || '';
+                }
+                
+                let periodKey = '';
+                if (dateStr) {
+                    dateStr = String(dateStr);
+                    let date = null;
+                    
+                    if (period === 'Week') {
+                        date = new Date(dateStr);
+                        if (isNaN(date.getTime())) {
+                            if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                date = new Date(dateStr);
+                            }
+                            else if (dateStr.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                                const [month, day, year] = dateStr.split('/');
+                                date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                            }
+                            else if (dateStr.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                                const [day, month, year] = dateStr.split('/');
+                                date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                            }
+                        }
+                    } else {
+                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                                          'July', 'August', 'September', 'October', 'November', 'December'];
+                        const shortMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                                               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                        
+                        let monthIndex = monthNames.findIndex(month => month.toLowerCase() === dateStr.toLowerCase());
+                        if (monthIndex === -1) {
+                            monthIndex = shortMonthNames.findIndex(month => month.toLowerCase() === dateStr.toLowerCase());
+                        }
+                        
+                        if (monthIndex !== -1) {
+                            const currentYear = new Date().getFullYear();
+                            date = new Date(currentYear, monthIndex, 1);
+                        }
+                        else if (dateStr.match(/^\d+$/)) {
+                            const periodNum = parseInt(dateStr);
+                            if (periodNum >= 1 && periodNum <= 12) {
+                                const currentYear = new Date().getFullYear();
+                                date = new Date(currentYear, periodNum - 1, 1);
+                            }
+                        }
+                        else {
+                            date = new Date(dateStr);
+                            if (isNaN(date.getTime())) {
+                                if (dateStr.match(/^\d{4}-\d{2}$/)) {
+                                    const [year, month] = dateStr.split('-');
+                                    date = new Date(parseInt(year), parseInt(month) - 1, 1);
+                                }
+                                else if (dateStr.match(/^\d{2}\/\d{4}$/)) {
+                                    const [month, year] = dateStr.split('/');
+                                    date = new Date(parseInt(year), parseInt(month) - 1, 1);
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (date && !isNaN(date.getTime())) {
+                        if (period === 'Week') {
+                            const weekNum = getWeekNumber(date);
+                            periodKey = `${date.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+                        } else if (period === 'Month') {
+                            periodKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                        } else if (period === 'Year') {
+                            periodKey = `${date.getFullYear()}`;
+                        }
+                    }
+                }
+                
+                if (!periodKey) periodKey = 'Unknown';
+                allPeriods.add(periodKey);
+                
+                // Initialize data structures
+                if (!userData[user]) {
+                    userData[user] = {};
+                }
+                if (!userData[user][periodKey]) {
+                    userData[user][periodKey] = {
+                        RTC: { hours: 0, cost: 0 },
+                        CTC: { hours: 0, cost: 0 }
+                    };
+                }
+                if (!periodTotals[periodKey]) {
+                    periodTotals[periodKey] = { hours: 0, cost: 0 };
+                }
+                
+                // Add to totals
+                userData[user][periodKey][type].hours += hours;
+                userData[user][periodKey][type].cost += cost;
+                periodTotals[periodKey].hours += hours;
+                periodTotals[periodKey].cost += cost;
+            });
+            
+            // Sort periods and remove Unknown if there are other periods
+            const sortedPeriods = Array.from(allPeriods).sort();
+            const filteredPeriods = sortedPeriods.filter(p => p !== 'Unknown' || sortedPeriods.length === 1);
+            
+            if (filteredPeriods.length === 0) {
+                return `
+                    <div style="text-align: center; padding: 2rem;">
+                        <h4>RTC/CTC ${metric} per ${period}</h4>
+                        <p>No valid date information found in the selected data.</p>
+                    </div>
+                `;
+            }
+            
+            // Calculate RTC vs CTC totals for each period
+            const rtcCtcTotals = { RTC: {}, CTC: {} };
+            
+            filteredPeriods.forEach(periodKey => {
+                rtcCtcTotals.RTC[periodKey] = { hours: 0, cost: 0 };
+                rtcCtcTotals.CTC[periodKey] = { hours: 0, cost: 0 };
+                
+                Object.keys(userData).forEach(user => {
+                    if (userData[user][periodKey]) {
+                        rtcCtcTotals.RTC[periodKey].hours += userData[user][periodKey].RTC.hours;
+                        rtcCtcTotals.RTC[periodKey].cost += userData[user][periodKey].RTC.cost;
+                        rtcCtcTotals.CTC[periodKey].hours += userData[user][periodKey].CTC.hours;
+                        rtcCtcTotals.CTC[periodKey].cost += userData[user][periodKey].CTC.cost;
+                    }
+                });
+            });
+            
+            let html = controls + `
+                <div>
+                    <h4 style="margin: 0 0 1rem 0; color: #1f2937; font-size: 1.1rem; font-weight: 600;">RTC/CTC ${metric} per ${period}${rmFilter ? ` (Manager: ${rmFilter})` : ''}</h4>
+                    <div style="margin-bottom: 1rem; color: #6b7280; font-size: 0.9rem;">
+                        <span style="display: inline-flex; align-items: center; gap: 0.25rem;">Click on <span style="color: var(--primary-blue); font-weight: 600; font-size: 1rem;">▶</span> to expand/collapse user details. Percentages show RTC vs CTC distribution.</span>
+                    </div>
+                    
+                    <div style="overflow-x: auto; max-width: 100%; border: 1px solid #d1d5db; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                        <table style="border-collapse: collapse; font-size: 0.9rem; white-space: nowrap; min-width: 100%; background: white;">
+                            <thead>
+                                <tr style="background: linear-gradient(135deg, #f8fafc, #f1f5f9);">
+                                    <th style="border: 1px solid #d1d5db; padding: 0.75rem 1rem; text-align: left; position: sticky; left: 0; background: linear-gradient(135deg, #f8fafc, #f1f5f9); z-index: 10; min-width: 180px; font-weight: 600; color: #374151;">Type / Employee</th>
+            `;
+            
+            // Add period columns with better spacing
+            filteredPeriods.forEach(periodKey => {
+                const columnWidth = metric.includes('%') ? '85px' : (metric.includes('Hours') ? '75px' : '90px');
+                html += `<th style="border: 1px solid #d1d5db; padding: 0.75rem 0.5rem; text-align: center; min-width: ${columnWidth}; width: ${columnWidth}; font-weight: 600; color: #374151;">${periodKey}</th>`;
+            });
+            
+            html += `
+                                    <th style="border: 1px solid #d1d5db; padding: 0.75rem 0.5rem; text-align: center; background: linear-gradient(135deg, #f8fafc, #f1f5f9); position: sticky; right: 0; z-index: 10; min-width: 100px; box-shadow: -2px 0 4px rgba(0,0,0,0.1); font-weight: 600; color: #374151;">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            
+            // RTC Summary Row (always visible)
+            html += `
+                <tr style="cursor: pointer; transition: all 0.2s ease;" onclick="toggleProjectView('rtc_details')" onmouseover="this.style.backgroundColor='#f0f9ff'" onmouseout="this.style.backgroundColor='transparent'">
+                    <td style="border: 1px solid #d1d5db; padding: 0.75rem 1rem; font-weight: 700; background: linear-gradient(135deg, #dbeafe, #e0f2fe); color: #1e40af; position: sticky; left: 0; z-index: 5; box-shadow: 2px 0 4px rgba(0,0,0,0.1);">
+                        <span id="toggle_rtc_details" style="margin-right: 0.75rem; font-size: 1.1rem; color: #2563eb; transition: transform 0.2s ease;">▶</span><span style="font-size: 1rem;">🔧</span> <strong>RTC</strong>
+                    </td>
+            `;
+            
+            let rtcGrandTotal = 0;
+            filteredPeriods.forEach(periodKey => {
+                const rtcHours = rtcCtcTotals.RTC[periodKey].hours;
+                const ctcHours = rtcCtcTotals.CTC[periodKey].hours;
+                const totalHours = rtcHours + ctcHours;
+                
+                let value = 0;
+                let display = '';
+                
+                if (metric === 'Hours') {
+                    value = rtcHours;
+                    display = `${value.toLocaleString()}h`;
+                } else if (metric === 'Hours %') {
+                    value = totalHours > 0 ? (rtcHours / totalHours * 100) : 0;
+                    display = `${value.toFixed(1)}%`;
+                } else if (metric === 'Cost') {
+                    value = rtcCtcTotals.RTC[periodKey].cost;
+                    display = `€${value.toLocaleString()}`;
+                } else if (metric === 'Cost %') {
+                    const rtcCost = rtcCtcTotals.RTC[periodKey].cost;
+                    const ctcCost = rtcCtcTotals.CTC[periodKey].cost;
+                    const totalCost = rtcCost + ctcCost;
+                    value = totalCost > 0 ? (rtcCost / totalCost * 100) : 0;
+                    display = `${value.toFixed(1)}%`;
+                }
+                
+                rtcGrandTotal += metric.includes('Hours') ? rtcHours : rtcCtcTotals.RTC[periodKey].cost;
+                
+                html += `<td style="border: 1px solid #d1d5db; padding: 0.75rem 0.5rem; text-align: center; background: linear-gradient(135deg, #dbeafe, #e0f2fe); color: #1e40af; font-weight: 600; font-size: 0.95rem;">${display}</td>`;
+            });
+            
+            // RTC Grand Total
+            const allRtcHours = filteredPeriods.reduce((sum, p) => sum + rtcCtcTotals.RTC[p].hours, 0);
+            const allCtcHours = filteredPeriods.reduce((sum, p) => sum + rtcCtcTotals.CTC[p].hours, 0);
+            const allTotalHours = allRtcHours + allCtcHours;
+            
+            let rtcGrandDisplay = '';
+            if (metric === 'Hours') {
+                rtcGrandDisplay = `${allRtcHours.toLocaleString()}h`;
+            } else if (metric === 'Hours %') {
+                const percentage = allTotalHours > 0 ? (allRtcHours / allTotalHours * 100) : 0;
+                rtcGrandDisplay = `${percentage.toFixed(1)}%`;
+            } else if (metric === 'Cost') {
+                const allRtcCost = filteredPeriods.reduce((sum, p) => sum + rtcCtcTotals.RTC[p].cost, 0);
+                rtcGrandDisplay = `€${allRtcCost.toLocaleString()}`;
+            } else if (metric === 'Cost %') {
+                const allRtcCost = filteredPeriods.reduce((sum, p) => sum + rtcCtcTotals.RTC[p].cost, 0);
+                const allCtcCost = filteredPeriods.reduce((sum, p) => sum + rtcCtcTotals.CTC[p].cost, 0);
+                const allTotalCost = allRtcCost + allCtcCost;
+                const percentage = allTotalCost > 0 ? (allRtcCost / allTotalCost * 100) : 0;
+                rtcGrandDisplay = `${percentage.toFixed(1)}%`;
+            }
+            
+            html += `<td style="border: 1px solid #d1d5db; padding: 0.75rem 0.5rem; text-align: center; font-weight: 700; background: linear-gradient(135deg, #dbeafe, #e0f2fe); color: #1e40af; position: sticky; right: 0; z-index: 5; box-shadow: -2px 0 4px rgba(0,0,0,0.1); font-size: 0.95rem;">${rtcGrandDisplay}</td>`;
+            html += `</tr>`;
+            
+            // RTC Details (collapsible)
+            const rtcUsers = Object.keys(userData).filter(user => 
+                filteredPeriods.some(p => userData[user][p] && userData[user][p].RTC.hours > 0)
+            );
+            
+            rtcUsers.sort((a, b) => {
+                const aTotal = filteredPeriods.reduce((sum, p) => sum + (userData[a][p]?.RTC.hours || 0), 0);
+                const bTotal = filteredPeriods.reduce((sum, p) => sum + (userData[b][p]?.RTC.hours || 0), 0);
+                return bTotal - aTotal;
+            }).forEach(user => {
+                html += `
+                    <tr id="rtc_details" style="display: none; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor='white'">
+                        <td style="border: 1px solid #d1d5db; padding: 0.6rem 1rem; padding-left: 2.5rem; font-weight: 500; position: sticky; left: 0; background: #fafbfc; z-index: 5; box-shadow: 2px 0 4px rgba(0,0,0,0.1); color: #374151; border-left: 3px solid #dbeafe;">${user}</td>
+                `;
+                
+                let userRtcTotal = 0;
+                filteredPeriods.forEach(periodKey => {
+                    let value = 0;
+                    let display = '';
+                    
+                    if (userData[user][periodKey]) {
+                        const userRtcHours = userData[user][periodKey].RTC.hours;
+                        const userCtcHours = userData[user][periodKey].CTC.hours;
+                        const userTotalHours = userRtcHours + userCtcHours;
+                        
+                        if (metric === 'Hours') {
+                            value = userRtcHours;
+                            display = value > 0 ? `${value.toLocaleString()}h` : '-';
+                        } else if (metric === 'Hours %') {
+                            value = userTotalHours > 0 ? (userRtcHours / userTotalHours * 100) : 0;
+                            display = value > 0 ? `${value.toFixed(1)}%` : '-';
+                        } else if (metric === 'Cost') {
+                            value = userData[user][periodKey].RTC.cost;
+                            display = value > 0 ? `€${value.toLocaleString()}` : '-';
+                        } else if (metric === 'Cost %') {
+                            const userRtcCost = userData[user][periodKey].RTC.cost;
+                            const userCtcCost = userData[user][periodKey].CTC.cost;
+                            const userTotalCost = userRtcCost + userCtcCost;
+                            value = userTotalCost > 0 ? (userRtcCost / userTotalCost * 100) : 0;
+                            display = value > 0 ? `${value.toFixed(1)}%` : '-';
+                        }
+                        
+                        userRtcTotal += metric.includes('Hours') ? userRtcHours : userData[user][periodKey].RTC.cost;
+                    } else {
+                        display = '-';
+                    }
+                    
+                    const color = value > 0 ? '#1e40af' : '#9ca3af';
+                    html += `<td style="border: 1px solid #d1d5db; padding: 0.6rem 0.5rem; text-align: center; color: ${color}; font-size: 0.9rem;">${display}</td>`;
+                });
+                
+                // User RTC Total
+                let userRtcTotalDisplay = '';
+                const userAllRtcHours = filteredPeriods.reduce((sum, p) => sum + (userData[user][p]?.RTC.hours || 0), 0);
+                const userAllCtcHours = filteredPeriods.reduce((sum, p) => sum + (userData[user][p]?.CTC.hours || 0), 0);
+                const userAllTotalHours = userAllRtcHours + userAllCtcHours;
+                
+                if (metric === 'Hours') {
+                    userRtcTotalDisplay = `${userAllRtcHours.toLocaleString()}h`;
+                } else if (metric === 'Hours %') {
+                    const percentage = userAllTotalHours > 0 ? (userAllRtcHours / userAllTotalHours * 100) : 0;
+                    userRtcTotalDisplay = `${percentage.toFixed(1)}%`;
+                } else if (metric === 'Cost') {
+                    const userAllRtcCost = filteredPeriods.reduce((sum, p) => sum + (userData[user][p]?.RTC.cost || 0), 0);
+                    userRtcTotalDisplay = `€${userAllRtcCost.toLocaleString()}`;
+                } else if (metric === 'Cost %') {
+                    const userAllRtcCost = filteredPeriods.reduce((sum, p) => sum + (userData[user][p]?.RTC.cost || 0), 0);
+                    const userAllCtcCost = filteredPeriods.reduce((sum, p) => sum + (userData[user][p]?.CTC.cost || 0), 0);
+                    const userAllTotalCost = userAllRtcCost + userAllCtcCost;
+                    const percentage = userAllTotalCost > 0 ? (userAllRtcCost / userAllTotalCost * 100) : 0;
+                    userRtcTotalDisplay = `${percentage.toFixed(1)}%`;
+                }
+                
+                html += `<td style="border: 1px solid #d1d5db; padding: 0.6rem 0.5rem; text-align: center; font-weight: 600; color: #1e40af; background: #f8fafc; position: sticky; right: 0; z-index: 5; box-shadow: -2px 0 4px rgba(0,0,0,0.1); font-size: 0.9rem;">${userRtcTotalDisplay}</td>`;
+                html += `</tr>`;
+            });
+            
+            // CTC Summary Row (always visible)
+            html += `
+                <tr style="cursor: pointer; transition: all 0.2s ease;" onclick="toggleProjectView('ctc_details')" onmouseover="this.style.backgroundColor='#fef7ed'" onmouseout="this.style.backgroundColor='transparent'">
+                    <td style="border: 1px solid #d1d5db; padding: 0.75rem 1rem; font-weight: 700; background: linear-gradient(135deg, #fed7aa, #fbbf24); color: #b45309; position: sticky; left: 0; z-index: 5; box-shadow: 2px 0 4px rgba(0,0,0,0.1);">
+                        <span id="toggle_ctc_details" style="margin-right: 0.75rem; font-size: 1.1rem; color: #d97706; transition: transform 0.2s ease;">▶</span><span style="font-size: 1rem;">⚙️</span> <strong>CTC</strong>
+                    </td>
+            `;
+            
+            filteredPeriods.forEach(periodKey => {
+                const rtcHours = rtcCtcTotals.RTC[periodKey].hours;
+                const ctcHours = rtcCtcTotals.CTC[periodKey].hours;
+                const totalHours = rtcHours + ctcHours;
+                
+                let value = 0;
+                let display = '';
+                
+                if (metric === 'Hours') {
+                    value = ctcHours;
+                    display = `${value.toLocaleString()}h`;
+                } else if (metric === 'Hours %') {
+                    value = totalHours > 0 ? (ctcHours / totalHours * 100) : 0;
+                    display = `${value.toFixed(1)}%`;
+                } else if (metric === 'Cost') {
+                    value = rtcCtcTotals.CTC[periodKey].cost;
+                    display = `€${value.toLocaleString()}`;
+                } else if (metric === 'Cost %') {
+                    const rtcCost = rtcCtcTotals.RTC[periodKey].cost;
+                    const ctcCost = rtcCtcTotals.CTC[periodKey].cost;
+                    const totalCost = rtcCost + ctcCost;
+                    value = totalCost > 0 ? (ctcCost / totalCost * 100) : 0;
+                    display = `${value.toFixed(1)}%`;
+                }
+                
+                html += `<td style="border: 1px solid #d1d5db; padding: 0.75rem 0.5rem; text-align: center; background: linear-gradient(135deg, #fed7aa, #fbbf24); color: #b45309; font-weight: 600; font-size: 0.95rem;">${display}</td>`;
+            });
+            
+            // CTC Grand Total  
+            let ctcGrandDisplay = '';
+            if (metric === 'Hours') {
+                ctcGrandDisplay = `${allCtcHours.toLocaleString()}h`;
+            } else if (metric === 'Hours %') {
+                const percentage = allTotalHours > 0 ? (allCtcHours / allTotalHours * 100) : 0;
+                ctcGrandDisplay = `${percentage.toFixed(1)}%`;
+            } else if (metric === 'Cost') {
+                const allCtcCost = filteredPeriods.reduce((sum, p) => sum + rtcCtcTotals.CTC[p].cost, 0);
+                ctcGrandDisplay = `€${allCtcCost.toLocaleString()}`;
+            } else if (metric === 'Cost %') {
+                const allRtcCost = filteredPeriods.reduce((sum, p) => sum + rtcCtcTotals.RTC[p].cost, 0);
+                const allCtcCost = filteredPeriods.reduce((sum, p) => sum + rtcCtcTotals.CTC[p].cost, 0);
+                const allTotalCost = allRtcCost + allCtcCost;
+                const percentage = allTotalCost > 0 ? (allCtcCost / allTotalCost * 100) : 0;
+                ctcGrandDisplay = `${percentage.toFixed(1)}%`;
+            }
+            
+            html += `<td style="border: 1px solid #d1d5db; padding: 0.75rem 0.5rem; text-align: center; font-weight: 700; background: linear-gradient(135deg, #fed7aa, #fbbf24); color: #b45309; position: sticky; right: 0; z-index: 5; box-shadow: -2px 0 4px rgba(0,0,0,0.1); font-size: 0.95rem;">${ctcGrandDisplay}</td>`;
+            html += `</tr>`;
+            
+            // CTC Details (collapsible)
+            const ctcUsers = Object.keys(userData).filter(user => 
+                filteredPeriods.some(p => userData[user][p] && userData[user][p].CTC.hours > 0)
+            );
+            
+            ctcUsers.sort((a, b) => {
+                const aTotal = filteredPeriods.reduce((sum, p) => sum + (userData[a][p]?.CTC.hours || 0), 0);
+                const bTotal = filteredPeriods.reduce((sum, p) => sum + (userData[b][p]?.CTC.hours || 0), 0);
+                return bTotal - aTotal;
+            }).forEach(user => {
+                html += `
+                    <tr id="ctc_details" style="display: none; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#fefbf3'" onmouseout="this.style.backgroundColor='white'">
+                        <td style="border: 1px solid #d1d5db; padding: 0.6rem 1rem; padding-left: 2.5rem; font-weight: 500; position: sticky; left: 0; background: #fefcf7; z-index: 5; box-shadow: 2px 0 4px rgba(0,0,0,0.1); color: #374151; border-left: 3px solid #fed7aa;">${user}</td>
+                `;
+                
+                filteredPeriods.forEach(periodKey => {
+                    let value = 0;
+                    let display = '';
+                    
+                    if (userData[user][periodKey]) {
+                        const userRtcHours = userData[user][periodKey].RTC.hours;
+                        const userCtcHours = userData[user][periodKey].CTC.hours;
+                        const userTotalHours = userRtcHours + userCtcHours;
+                        
+                        if (metric === 'Hours') {
+                            value = userCtcHours;
+                            display = value > 0 ? `${value.toLocaleString()}h` : '-';
+                        } else if (metric === 'Hours %') {
+                            value = userTotalHours > 0 ? (userCtcHours / userTotalHours * 100) : 0;
+                            display = value > 0 ? `${value.toFixed(1)}%` : '-';
+                        } else if (metric === 'Cost') {
+                            value = userData[user][periodKey].CTC.cost;
+                            display = value > 0 ? `€${value.toLocaleString()}` : '-';
+                        } else if (metric === 'Cost %') {
+                            const userRtcCost = userData[user][periodKey].RTC.cost;
+                            const userCtcCost = userData[user][periodKey].CTC.cost;
+                            const userTotalCost = userRtcCost + userCtcCost;
+                            value = userTotalCost > 0 ? (userCtcCost / userTotalCost * 100) : 0;
+                            display = value > 0 ? `${value.toFixed(1)}%` : '-';
+                        }
+                    } else {
+                        display = '-';
+                    }
+                    
+                    const color = value > 0 ? '#b45309' : '#9ca3af';
+                    html += `<td style="border: 1px solid #d1d5db; padding: 0.6rem 0.5rem; text-align: center; color: ${color}; font-size: 0.9rem;">${display}</td>`;
+                });
+                
+                // User CTC Total
+                let userCtcTotalDisplay = '';
+                const userAllRtcHours = filteredPeriods.reduce((sum, p) => sum + (userData[user][p]?.RTC.hours || 0), 0);
+                const userAllCtcHours = filteredPeriods.reduce((sum, p) => sum + (userData[user][p]?.CTC.hours || 0), 0);
+                const userAllTotalHours = userAllRtcHours + userAllCtcHours;
+                
+                if (metric === 'Hours') {
+                    userCtcTotalDisplay = `${userAllCtcHours.toLocaleString()}h`;
+                } else if (metric === 'Hours %') {
+                    const percentage = userAllTotalHours > 0 ? (userAllCtcHours / userAllTotalHours * 100) : 0;
+                    userCtcTotalDisplay = `${percentage.toFixed(1)}%`;
+                } else if (metric === 'Cost') {
+                    const userAllCtcCost = filteredPeriods.reduce((sum, p) => sum + (userData[user][p]?.CTC.cost || 0), 0);
+                    userCtcTotalDisplay = `€${userAllCtcCost.toLocaleString()}`;
+                } else if (metric === 'Cost %') {
+                    const userAllRtcCost = filteredPeriods.reduce((sum, p) => sum + (userData[user][p]?.RTC.cost || 0), 0);
+                    const userAllCtcCost = filteredPeriods.reduce((sum, p) => sum + (userData[user][p]?.CTC.cost || 0), 0);
+                    const userAllTotalCost = userAllRtcCost + userAllCtcCost;
+                    const percentage = userAllTotalCost > 0 ? (userAllCtcCost / userAllTotalCost * 100) : 0;
+                    userCtcTotalDisplay = `${percentage.toFixed(1)}%`;
+                }
+                
+                html += `<td style="border: 1px solid #d1d5db; padding: 0.6rem 0.5rem; text-align: center; font-weight: 600; color: #b45309; background: #fefbf7; position: sticky; right: 0; z-index: 5; box-shadow: -2px 0 4px rgba(0,0,0,0.1); font-size: 0.9rem;">${userCtcTotalDisplay}</td>`;
+                html += `</tr>`;
+            });
+            
+            html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+        
+        function generateProjectRmView(period, metric) {
+            // For project view, show project breakdown with Resource Manager filtering
+            // This would be similar to generateRegularRmView but grouped by projects first
+            return generateRegularRmView(period, metric); // Simplified for now
+        }
+        
+        function getResourceManagerOptions(ppmData, selected) {
+            const resourceManagers = [...new Set(ppmData.map(item => {
+                return item['Resource Manager'] || item.resourceManager || item['Manager'] || item.manager || '';
+            }))].filter(rm => rm && rm.trim() !== '').sort();
+            
+            return resourceManagers.map(rm => 
+                `<option value="${rm}" ${selected === rm ? 'selected' : ''}>${rm}</option>`
+            ).join('');
+        }
+        
+        function updateRmPeriod(newPeriod) {
+            window.rmPeriodSelection = newPeriod;
+            // Regenerate the current modal content
+            const currentCardId = 'rtc-ctc-per-rm';
+            const currentViewType = getCardViewType(currentCardId);
+            generateCostViewContent(currentCardId, currentViewType);
+        }
+        
+        function updateRmMetric(newMetric) {
+            window.rmMetricSelection = newMetric;
+            // Regenerate the current modal content
+            const currentCardId = 'rtc-ctc-per-rm';
+            const currentViewType = getCardViewType(currentCardId);
+            generateCostViewContent(currentCardId, currentViewType);
+        }
+        
+        function updateResourceManager(newRm) {
+            window.resourceManagerSelection = newRm;
+            // Regenerate the current modal content
+            const currentCardId = 'rtc-ctc-per-rm';
             const currentViewType = getCardViewType(currentCardId);
             generateCostViewContent(currentCardId, currentViewType);
         }
