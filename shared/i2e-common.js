@@ -72,9 +72,17 @@ function standardizeWBS(wbsCode) {
         return '';
     }
     
-    // Remove "-EXN" suffix from PPM data
-    // Trim whitespace and convert to uppercase
-    return wbsCode.replace(/-EXN$/, '').trim().toUpperCase();
+    // Remove "-EXN" suffix from PPM data and trim/uppercase
+    let standardized = wbsCode.replace(/-EXN$/, '').trim().toUpperCase();
+    
+    // Extract project ID from full WBS format (EN44-PRO0022640 -> PRO0022640) 
+    // This handles both CTC full format and RTC partial format
+    const projectMatch = standardized.match(/([A-Z]{2,4}\d{7})$/);
+    if (projectMatch) {
+        return projectMatch[1];
+    }
+    
+    return standardized;
 }
 
 /**
@@ -396,11 +404,12 @@ function isValidEmail(email) {
 function isValidWBS(wbsCode) {
     if (!wbsCode || typeof wbsCode !== 'string') return false;
     
-    // WBS format: AA44-PRO0012345 or similar
-    const wbsRegex = /^[A-Z]{2}\d{2}-[A-Z]{3}\d{7}$/;
+    // Support both full WBS format (AA44-PRO0012345) and RTC project format (PRO0012345)
+    const fullWbsRegex = /^[A-Z]{2}\d{2}-[A-Z]{3}\d{7}$/;  // CTC format
+    const rtcProjectRegex = /^[A-Z]{3}\d{7}$/;             // RTC format
     const standardized = standardizeWBS(wbsCode);
     
-    return wbsRegex.test(standardized);
+    return fullWbsRegex.test(standardized) || rtcProjectRegex.test(standardized);
 }
 
 // ===== EXPORT FOR MODULE USAGE =====

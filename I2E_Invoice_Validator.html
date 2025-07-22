@@ -837,8 +837,8 @@
             let duplicatesRemoved = 0;
             
             ppmArray.forEach(row => {
-                // Create unique key: WBS + User + Month + Year + Week
-                const wbs = row['WBS Element'] || row['WBS Element ID'] || row['WBS'] || '';
+                // Create unique key: WBS + User + Month + Year + Week (support RTC Project field)
+                const wbs = row['WBS Element'] || row['WBS Element ID'] || row['WBS'] || row['Project'] || row.project || '';
                 const user = row['User'] || row['Employee'] || '';
                 const month = row['Month of invoice'] || '';
                 const year = extractYearFromWeekStartsOn(row['Week starts on']) || '';
@@ -1366,13 +1366,14 @@
                 console.log('📋 PPM sample row:', validationData.ppmData[0]);
                 
                 validationData.ppmData.forEach(row => {
-                    const wbs = standardizeWBS(row['WBS Element ID']);
+                    // Support both CTC (WBS Element ID) and RTC (Project) formats
+                    const wbs = standardizeWBS(row['WBS Element ID'] || row['Project'] || row.project);
                     if (!wbs) return;
                     
                     if (!wbsMap.has(wbs)) {
                         wbsMap.set(wbs, {
                             wbsCode: wbs,
-                            projectName: row['Project Name'] || 'Unknown Project',
+                            projectName: row['Project Name'] || row.projectName || row['Project'] || row.project || 'Unknown Project',
                             internalCost: 0,
                             externalCost: 0,
                             invoicedAmount: 0
@@ -1393,10 +1394,10 @@
                 
                 let processedCount = 0;
                 validationData.extSapData.forEach(row => {
-                    // Try different column names for WBS Element
-                    const wbs = standardizeWBS(row['WBS Element'] || row['WBS Element ID'] || row['WBS']);
+                    // Support all 3 RTC scenarios: full WBS, partial in WBS Element, or partial in Project column
+                    const wbs = standardizeWBS(row['WBS Element'] || row['WBS Element ID'] || row['WBS'] || row['Project'] || row.project);
                     if (!wbs) {
-                        console.log('❌ No WBS found in row (tried: WBS Element, WBS Element ID, WBS):', row);
+                        console.log('❌ No WBS found in row (tried: WBS Element, WBS Element ID, WBS, Project):', row);
                         return; // Skip this row, continue with next row
                     }
                     
@@ -1405,7 +1406,7 @@
                     if (!wbsMap.has(wbs)) {
                         wbsMap.set(wbs, {
                             wbsCode: wbs,
-                            projectName: row['CO object name'] || 'Unknown Project',
+                            projectName: row['CO object name'] || row['Project Name'] || row.projectName || row['Project'] || row.project || 'Unknown Project',
                             internalCost: 0,
                             externalCost: 0,
                             invoicedAmount: 0
@@ -2165,7 +2166,8 @@
                 const invoiceMonthName = monthOfInvoice ? monthOfInvoice.split(' ')[0] : null;
                 
                 validationData.ppmData.forEach(row => {
-                    const rowWbs = standardizeWBS(row['WBS Element ID']);
+                    // Support both CTC (WBS Element ID) and RTC (Project) formats
+                    const rowWbs = standardizeWBS(row['WBS Element ID'] || row['Project'] || row.project);
                     const rowMonthOfInvoice = row['Month of invoice'];
                     
                     if (rowWbs === wbsCode && rowMonthOfInvoice === invoiceMonthName) {
@@ -2197,7 +2199,8 @@
                 
                 if (targetPeriod && targetFiscalYear) {
                     validationData.extSapData.forEach(row => {
-                        const rowWbs = standardizeWBS(row['WBS Element'] || row['WBS Element ID'] || row['WBS']);
+                        // Support all 3 RTC scenarios: full WBS, partial in WBS Element, or partial in Project column
+                        const rowWbs = standardizeWBS(row['WBS Element'] || row['WBS Element ID'] || row['WBS'] || row['Project'] || row.project);
                         const period = parseInt(row['Period']);
                         const fiscalYear = parseInt(row['Fiscal Year']);
                         
@@ -2428,7 +2431,8 @@
                 let ppmMatches = 0;
                 
                 validationData.ppmData.forEach(row => {
-                    const rowWbs = standardizeWBS(row['WBS Element ID']);
+                    // Support both CTC (WBS Element ID) and RTC (Project) formats
+                    const rowWbs = standardizeWBS(row['WBS Element ID'] || row['Project'] || row.project);
                     const rowMonthOfInvoice = row['Month of invoice']; // Format: "April"
                     
                     ppmChecked++;
@@ -2473,13 +2477,23 @@
                     let extSapMatches = 0;
                     
                     validationData.extSapData.forEach(row => {
-                        const rowWbs = standardizeWBS(row['WBS Element'] || row['WBS Element ID'] || row['WBS']);
+                        // Support all 3 RTC scenarios: full WBS, partial in WBS Element, or partial in Project column
+                        const rowWbs = standardizeWBS(row['WBS Element'] || row['WBS Element ID'] || row['WBS'] || row['Project'] || row.project);
                         const period = parseInt(row['Period']); // Month as number
                         const fiscalYear = parseInt(row['Fiscal Year']); // Year
                         
                         extSapChecked++;
                         if (extSapChecked <= 5) {
-                            console.log(`🔍 EXT SAP Row ${extSapChecked}: WBS=${rowWbs}, Period=${period}, FiscalYear=${fiscalYear}`);
+                            console.log(`🔍 EXT SAP Row ${extSapChecked}: WBS=${rowWbs}, Period=${period}, FiscalYear=${fiscalYear}`, {
+                                'Raw WBS Sources': {
+                                    'WBS Element': row['WBS Element'],
+                                    'WBS Element ID': row['WBS Element ID'], 
+                                    'WBS': row['WBS'],
+                                    'Project': row['Project'],
+                                    'project': row.project
+                                },
+                                'Target': `WBS=${wbsCode}, Period=${targetPeriod}, FiscalYear=${targetFiscalYear}`
+                            });
                         }
                         
                         // Match WBS, Period (month), and Fiscal Year

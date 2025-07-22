@@ -1312,11 +1312,12 @@
                     i2e: null
                 };
                 
-                // Look for PPM data
-                const ppmWorksheet = workbook.worksheets.find(ws => 
-                    ws.name.toLowerCase().includes('ppm') && 
-                    ws.name.toLowerCase().includes('details')
-                );
+                // Look for PPM data - flexible matching for various PPM sheet names
+                const ppmWorksheet = workbook.worksheets.find(ws => {
+                    const name = ws.name.toLowerCase();
+                    return name.includes('ppm') && 
+                           (name.includes('details') || name.includes('edit') || name === 'ppm' || name.includes('data'));
+                });
                 
                 if (ppmWorksheet) {
                     console.log('📊 Found PPM worksheet:', ppmWorksheet.name);
@@ -1351,6 +1352,17 @@
                     console.log('📊 Found I2E worksheet:', i2eWorksheet.name);
                     results.i2e = await parseI2EData(i2eWorksheet, file.name);
                     console.log('📊 I2E data parsed:', results.i2e ? results.i2e.length : 0, 'rows');
+                }
+                
+                // Validate that we found at least some data
+                const hasValidData = (results.ppm && results.ppm.length > 0) || 
+                                   (results.extSap && results.extSap.length > 0) || 
+                                   (results.i2e && results.i2e.length > 0);
+                
+                if (!hasValidData) {
+                    console.warn('⚠️ No valid data found in file:', file.name);
+                    console.warn('⚠️ Available worksheets were:', workbook.worksheets.map(ws => ws.name));
+                    throw new Error(`No valid data found in ${file.name}. Please ensure the Excel file contains sheets named 'PPM Details', 'EXT SAP', or 'Invoices Validated'.`);
                 }
                 
                 // Save to cache
@@ -1405,12 +1417,16 @@
                     item.sourceFile = sourceFile;
                     item.type = 'Internal';
                     
-                    // Only add if has essential fields
+                    // Only add if has essential fields - check both WBS and Project fields for RTC support
                     const wbsValue = (wbsIndex >= 0 && row[wbsIndex]) ? row[wbsIndex].toString().trim() : '';
+                    const projectValue = (projectIndex >= 0 && row[projectIndex]) ? row[projectIndex].toString().trim() : '';
                     const costValue = (valueIndex >= 0 && row[valueIndex]) ? parseFloat(row[valueIndex]) || 0 : 0;
                     
-                    // Skip rows with empty/meaningless WBS codes or zero cost
-                    if (wbsValue && costValue !== 0 && wbsValue.toLowerCase() !== 'unknown' && wbsValue.toLowerCase() !== 'n/a') {
+                    // Accept rows with either WBS Element ID (CTC) or Project (RTC), plus non-zero cost
+                    const hasValidProject = (wbsValue && wbsValue.toLowerCase() !== 'unknown' && wbsValue.toLowerCase() !== 'n/a') ||
+                                          (projectValue && projectValue.toLowerCase() !== 'unknown' && projectValue.toLowerCase() !== 'n/a');
+                    
+                    if (hasValidProject && costValue !== 0) {
                         data.push(item);
                     }
                 }
@@ -1560,22 +1576,29 @@
         
         async function saveCostDataToCache(results, sourceFile) {
             const existingData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            let newEntriesCount = 0;
             
-            // Add new data
+            // Add new data and count entries
             if (results.ppm) {
                 existingData.push(...results.ppm);
+                newEntriesCount += results.ppm.length;
+                console.log(`💾 Added ${results.ppm.length} PPM entries from ${sourceFile}`);
             }
             if (results.extSap) {
                 existingData.push(...results.extSap);
+                newEntriesCount += results.extSap.length;
+                console.log(`💾 Added ${results.extSap.length} EXT SAP entries from ${sourceFile}`);
             }
             if (results.i2e) {
                 existingData.push(...results.i2e);
+                newEntriesCount += results.i2e.length;
+                console.log(`💾 Added ${results.i2e.length} I2E entries from ${sourceFile}`);
             }
             
             // Save to cache
             saveToLocalStorage('i2e_cost_data_cache', existingData);
             
-            console.log(`💾 Saved ${existingData.length} cost data entries to cache`);
+            console.log(`💾 Saved ${newEntriesCount} new entries from ${sourceFile}. Total cache: ${existingData.length} entries`);
         }
         
         function showFileProcessingStatus(type, message, status = 'info') {
@@ -1837,7 +1860,8 @@
                     invoices: [
                         await fetchDemoFile('DEMO/invoice_1.pdf', 'application/pdf'),
                         await fetchDemoFile('DEMO/invoice_2.pdf', 'application/pdf'),
-                        await fetchDemoFile('DEMO/invoice_3.pdf', 'application/pdf')
+                        await fetchDemoFile('DEMO/invoice_3.pdf', 'application/pdf'),
+                        await fetchDemoFile('DEMO/invoice_rtc.pdf', 'application/pdf')
                     ]
                 };
                 
@@ -1914,7 +1938,8 @@
                 invoice.fullInvoiceData && invoice.fullInvoiceData.some(item => 
                     item.fileName && (item.fileName.includes('invoice_1.pdf') || 
                                     item.fileName.includes('invoice_2.pdf') || 
-                                    item.fileName.includes('invoice_3.pdf'))
+                                    item.fileName.includes('invoice_3.pdf') ||
+                                    item.fileName.includes('invoice_rtc.pdf'))
                 )
             );
             
@@ -1977,7 +2002,8 @@
                     const allItemsAreDemo = invoice.fullInvoiceData.every(item => 
                         item.fileName && (item.fileName.includes('invoice_1.pdf') || 
                                         item.fileName.includes('invoice_2.pdf') || 
-                                        item.fileName.includes('invoice_3.pdf'))
+                                        item.fileName.includes('invoice_3.pdf') ||
+                                        item.fileName.includes('invoice_rtc.pdf'))
                     );
                     return !allItemsAreDemo;
                 }
@@ -1986,7 +2012,8 @@
                 if (invoice.summary && invoice.summary.fileName) {
                     const isDemoFile = invoice.summary.fileName.includes('invoice_1.pdf') || 
                                      invoice.summary.fileName.includes('invoice_2.pdf') || 
-                                     invoice.summary.fileName.includes('invoice_3.pdf');
+                                     invoice.summary.fileName.includes('invoice_3.pdf') ||
+                                     invoice.summary.fileName.includes('invoice_rtc.pdf');
                     return !isDemoFile;
                 }
                 

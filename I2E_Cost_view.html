@@ -142,9 +142,9 @@
             const projects = [...new Set(costData.map(item => {
                 // Handle different field names based on data source
                 if (item.source === 'EXT SAP') {
-                    return item['CO object name'] || item['WBS Element'] || item.wbs || item['Project Name'] || item.projectName || 'Unknown';
+                    return item['CO object name'] || item['WBS Element'] || item.wbs || item['Project Name'] || item.projectName || item['Project'] || item.project || 'Unknown';
                 } else {
-                    return item['Project Name'] || item.projectName || item['WBS Element ID'] || item.wbs || 'Unknown';
+                    return item['Project Name'] || item.projectName || item['WBS Element ID'] || item.wbs || item['Project'] || item.project || 'Unknown';
                 }
             }))].filter(project => {
                 // Filter out meaningless project names
@@ -246,10 +246,10 @@
                 let projectName;
                 if (item.source === 'EXT SAP') {
                     // EXT SAP data uses different field names
-                    projectName = item['CO object name'] || item['WBS Element'] || item.wbs || item['Project Name'] || item.projectName || 'Unknown';
+                    projectName = item['CO object name'] || item['WBS Element'] || item.wbs || item['Project Name'] || item.projectName || item['Project'] || item.project || 'Unknown';
                 } else {
-                    // PPM and I2E data
-                    projectName = item['Project Name'] || item.projectName || item['WBS Element ID'] || item.wbs || 'Unknown';
+                    // PPM and I2E data - include 'Project' field for RTC projects
+                    projectName = item['Project Name'] || item.projectName || item['WBS Element ID'] || item.wbs || item['Project'] || item.project || 'Unknown';
                 }
                 
                 // Filter out items with unknown project names
@@ -267,28 +267,32 @@
             // Hide no data message and show cards
             noDataDiv.style.display = 'none';
             
-            // Generate the cost view cards (copied from Validator)
+            // Check data availability for smart card enabling
+            const hasPpmData = costViewsFilteredData.some(item => item.source === 'PPM');
+            const hasExtSapData = costViewsFilteredData.some(item => item.source === 'EXT SAP');
+            
+            // Generate the cost view cards with smart enabling
             const cards = [
                 {
                     id: 'hours-per-week',
                     icon: '⏰',
                     title: 'Internal Hours/Costs',
-                    status: 'Ready',
-                    enabled: true
+                    status: hasPpmData ? 'Ready' : 'No PPM Data',
+                    enabled: hasPpmData
                 },
                 {
                     id: 'invoices-per-supplier',
                     icon: '🏢',
                     title: 'External Cost',
-                    status: 'Ready',
-                    enabled: true
+                    status: hasExtSapData ? 'Ready' : 'No EXT SAP Data',
+                    enabled: hasExtSapData
                 },
                 {
                     id: 'rtc-ctc-per-rm',
                     icon: '🛠️',
                     title: 'RTC/CTC per RM',
-                    status: 'Ready',
-                    enabled: true
+                    status: hasPpmData ? 'Ready' : 'No PPM Data',
+                    enabled: hasPpmData
                 },
                 {
                     id: 'coming-soon-2',
@@ -919,7 +923,7 @@
             const allPeriods = new Set();
             
             ppmData.forEach(item => {
-                const project = item['Project Name'] || item.projectName || item['WBS Element ID'] || item.wbs || 'Unknown Project';
+                const project = item['Project Name'] || item.projectName || item['WBS Element ID'] || item.wbs || item['Project'] || item.project || 'Unknown Project';
                 
                 // Use type selection to determine grouping field
                 let employee;
