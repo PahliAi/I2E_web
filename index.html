@@ -1418,8 +1418,28 @@
                     item.type = 'Internal';
                     
                     // Only add if has essential fields - check both WBS and Project fields for RTC support
-                    const wbsValue = (wbsIndex >= 0 && row[wbsIndex]) ? row[wbsIndex].toString().trim() : '';
-                    const projectValue = (projectIndex >= 0 && row[projectIndex]) ? row[projectIndex].toString().trim() : '';
+                    // Helper function to check if a cell value is truly empty/blank
+                    const isBlankCell = (cellValue) => {
+                        return cellValue === null || 
+                               cellValue === undefined || 
+                               cellValue === '' || 
+                               (typeof cellValue === 'string' && cellValue.trim() === '') ||
+                               cellValue === 'null' ||
+                               cellValue === 'undefined';
+                    };
+                    
+                    // Debug logging for empty WBS cells (remove after production testing)
+                    if (wbsIndex >= 0 && row[wbsIndex] !== undefined) {
+                        const cellValue = row[wbsIndex];
+                        if (isBlankCell(cellValue)) {
+                            console.log('🔍 Empty WBS cell - type:', typeof cellValue, 'value:', JSON.stringify(cellValue), 'length:', cellValue?.length);
+                        }
+                    }
+                    
+                    const wbsValue = (wbsIndex >= 0 && !isBlankCell(row[wbsIndex])) ? 
+                                   row[wbsIndex].toString().trim() : '';
+                    const projectValue = (projectIndex >= 0 && !isBlankCell(row[projectIndex])) ? 
+                                       row[projectIndex].toString().trim() : '';
                     const costValue = (valueIndex >= 0 && row[valueIndex]) ? parseFloat(row[valueIndex]) || 0 : 0;
                     
                     // Accept rows with either WBS Element ID (CTC) or Project (RTC), plus non-zero cost
