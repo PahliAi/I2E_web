@@ -1396,16 +1396,71 @@
                 const monthIndex = headers.findIndex(h => h && (h.includes('month') || h.includes('period')));
                 
                 console.log('📊 PPM column indices:', { wbsIndex, projectIndex, valueIndex, monthIndex });
+                console.log('📊 First 10 headers with indices:', headers.slice(0, 10).map((h, i) => `${i}:${h}`));
                 
-                // Process data rows
+                // Helper function to check if a cell value is truly empty/blank
+                const isBlankCell = (cellValue) => {
+                    return cellValue === null || 
+                           cellValue === undefined || 
+                           cellValue === '' || 
+                           (typeof cellValue === 'string' && cellValue.trim() === '') ||
+                           cellValue === 'null' ||
+                           cellValue === 'undefined';
+                };
+                
+                // Process data rows with comprehensive debugging
+                let debugCounters = {
+                    totalRows: 0,
+                    emptyRows: 0,
+                    noValidProject: 0,
+                    zeroCost: 0,
+                    validPassed: 0,
+                    wbsEmpty: 0,
+                    projectEmpty: 0,
+                    bothFilled: 0
+                };
+                
                 for (let i = 2; i < rows.length; i++) {
                     const row = rows[i];
-                    if (!row) continue;
+                    debugCounters.totalRows++;
+                    
+                    if (!row) {
+                        debugCounters.emptyRows++;
+                        continue;
+                    }
+                    
+                    // Extract raw values
+                    const rawWbs = wbsIndex >= 0 ? row[wbsIndex] : undefined;
+                    const rawProject = projectIndex >= 0 ? row[projectIndex] : undefined;
+                    const rawCost = valueIndex >= 0 ? row[valueIndex] : undefined;
+                    
+                    // Debug first 5 rows in detail
+                    if (i < 7) {
+                        console.log(`🔍 Row ${i} DETAILED DEBUG:`);
+                        console.log('  - Raw WBS:', typeof rawWbs, JSON.stringify(rawWbs));
+                        console.log('  - Raw Project:', typeof rawProject, JSON.stringify(rawProject));
+                        console.log('  - Raw Cost:', typeof rawCost, JSON.stringify(rawCost));
+                    }
+                    
+                    // Process values
+                    const wbsValue = (wbsIndex >= 0 && !isBlankCell(rawWbs)) ? rawWbs.toString().trim() : '';
+                    const projectValue = (projectIndex >= 0 && !isBlankCell(rawProject)) ? rawProject.toString().trim() : '';
+                    const costValue = (valueIndex >= 0 && rawCost) ? parseFloat(rawCost) || 0 : 0;
+                    
+                    // Track empty vs filled
+                    if (!wbsValue) debugCounters.wbsEmpty++;
+                    if (!projectValue) debugCounters.projectEmpty++;
+                    if (wbsValue && projectValue) debugCounters.bothFilled++;
+                    
+                    // Debug processed values for first few rows
+                    if (i < 7) {
+                        console.log('  - Processed WBS:', JSON.stringify(wbsValue));
+                        console.log('  - Processed Project:', JSON.stringify(projectValue));
+                        console.log('  - Processed Cost:', costValue);
+                    }
                     
                     // Create object with original Excel column names
                     const item = {};
-                    
-                    // Map all columns to their original names
                     for (let j = 0; j < headerRow.length; j++) {
                         if (headerRow[j] && row[j] !== undefined) {
                             item[headerRow[j]] = row[j];
@@ -1417,39 +1472,28 @@
                     item.sourceFile = sourceFile;
                     item.type = 'Internal';
                     
-                    // Only add if has essential fields - check both WBS and Project fields for RTC support
-                    // Helper function to check if a cell value is truly empty/blank
-                    const isBlankCell = (cellValue) => {
-                        return cellValue === null || 
-                               cellValue === undefined || 
-                               cellValue === '' || 
-                               (typeof cellValue === 'string' && cellValue.trim() === '') ||
-                               cellValue === 'null' ||
-                               cellValue === 'undefined';
-                    };
-                    
-                    // Debug logging for empty WBS cells (remove after production testing)
-                    if (wbsIndex >= 0 && row[wbsIndex] !== undefined) {
-                        const cellValue = row[wbsIndex];
-                        if (isBlankCell(cellValue)) {
-                            console.log('🔍 Empty WBS cell - type:', typeof cellValue, 'value:', JSON.stringify(cellValue), 'length:', cellValue?.length);
-                        }
-                    }
-                    
-                    const wbsValue = (wbsIndex >= 0 && !isBlankCell(row[wbsIndex])) ? 
-                                   row[wbsIndex].toString().trim() : '';
-                    const projectValue = (projectIndex >= 0 && !isBlankCell(row[projectIndex])) ? 
-                                       row[projectIndex].toString().trim() : '';
-                    const costValue = (valueIndex >= 0 && row[valueIndex]) ? parseFloat(row[valueIndex]) || 0 : 0;
-                    
-                    // Accept rows with either WBS Element ID (CTC) or Project (RTC), plus non-zero cost
+                    // Validation logic with debugging
                     const hasValidProject = (wbsValue && wbsValue.toLowerCase() !== 'unknown' && wbsValue.toLowerCase() !== 'n/a') ||
                                           (projectValue && projectValue.toLowerCase() !== 'unknown' && projectValue.toLowerCase() !== 'n/a');
                     
-                    if (hasValidProject && costValue !== 0) {
+                    if (i < 7) {
+                        console.log('  - hasValidProject:', hasValidProject);
+                        console.log('  - costValue !== 0:', costValue !== 0);
+                        console.log('  - Will be added:', hasValidProject && costValue !== 0);
+                    }
+                    
+                    if (!hasValidProject) {
+                        debugCounters.noValidProject++;
+                    } else if (costValue === 0) {
+                        debugCounters.zeroCost++;
+                    } else {
+                        debugCounters.validPassed++;
                         data.push(item);
                     }
                 }
+                
+                console.log('🔍 PPM DEBUG SUMMARY:', debugCounters);
+                console.log('🔍 Final data length:', data.length);
                 
                 return data;
             } catch (error) {
