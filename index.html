@@ -1460,7 +1460,9 @@
                                           (projectValue && projectValue.toLowerCase() !== 'unknown' && projectValue.toLowerCase() !== 'n/a');
                     
                     if (hasValidProject && costValue !== 0) {
-                        data.push(item);
+                        // Normalize field names for consistent access across all screens
+                        const normalizedItem = normalizeExcelFieldNames(item);
+                        data.push(normalizedItem);
                     }
                 }
                 

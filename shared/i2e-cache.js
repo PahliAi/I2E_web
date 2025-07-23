@@ -459,15 +459,25 @@ function aggregateByWBS(invoices) {
 
 /**
  * Clear all cached invoice data
- * @returns {boolean} Success status
+ * @returns {Promise<boolean>} Success status
  */
-function clearCache() {
+async function clearCache() {
     try {
+        // Clear localStorage invoice data
         localStorage.removeItem(CACHE_KEYS.PENDING);
         localStorage.removeItem(CACHE_KEYS.APPROVED);
         localStorage.removeItem(CACHE_KEYS.REJECTED);
         
-        logInfo('Cache cleared successfully');
+        // Also clear any IndexedDB invoice data if it exists
+        try {
+            await removeFromIndexedDB(CACHE_KEYS.PENDING);
+            await removeFromIndexedDB(CACHE_KEYS.APPROVED);
+            await removeFromIndexedDB(CACHE_KEYS.REJECTED);
+        } catch (indexedDBError) {
+            console.warn('IndexedDB clearing failed (may not exist):', indexedDBError);
+        }
+        
+        logInfo('Cache cleared successfully (localStorage + IndexedDB)');
         return true;
         
     } catch (error) {

@@ -668,16 +668,30 @@
                 
                 const cost = parseExcelNumericValue(item['Cost €'] || item.value || 0);
                 const hours = parseExcelNumericValue(item['Total'] || item.total || 0);
-                // Use different fields based on period selection
-                let dateStr = '';
+                // Use PPM-specific field logic based on period selection
+                let periodKey = '';
                 if (period === 'Week') {
-                    dateStr = item['Week starts on'] || item.weekStartsOn || item.week || '';
+                    const dateStr = item['Week starts on'] || item.weekStartsOn || item.week || '';
+                    periodKey = parseI2EDate(dateStr, period);
                 } else {
-                    dateStr = item['Month of invoice'] || item.month || item['Month'] || item['Period'] || item.period || '';
+                    // For Month/Year: Use standardized field names (normalized during Excel parsing)
+                    const spp = item.serviceProvisionPeriod || item['Service provision period'] || '';
+                    const wso = item.weekStartsOn || item['Week starts on'] || '';
+                    
+                    if (spp && wso) {
+                        periodKey = calculatePPMPeriod(spp, wso, period);
+                    } else {
+                        // Fallback to old logic if fields missing
+                        const dateStr = item['Month of invoice'] || item.month || item['Month'] || item['Period'] || item.period || '';
+                        periodKey = parseI2EDate(dateStr, period);
+                    }
+                    
+                    // DEBUG: Log field availability for troubleshooting
+                    if (periodKey === 'Unknown') {
+                        console.log('🔍 PPM DEBUG (Employee View) - SPP:', spp, 'WSO:', wso);
+                        console.log('🔍 PPM DEBUG (Employee View) - Available fields:', Object.keys(item));
+                    }
                 }
-                
-                // Use centralized date parsing helper
-                const periodKey = parseI2EDate(dateStr, period);
                 allPeriods.add(periodKey);
                 
                 if (!employeeData[employee]) {
@@ -1398,6 +1412,108 @@
             return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
         }
         
+        /**
+         * Calculate PPM period based on Service Provision Period and Week starts on
+         * Implements business logic: SPP for month, WSO for year (with January special case)
+         * @param {string} spp - Service Provision Period (e.g., "January", "February") 
+         * @param {string} wso - Week starts on (e.g., "29-12-2024", "2024-12-29")
+         * @param {string} periodType - 'Month' or 'Year'
+         * @returns {string} Period key (e.g., '2025-01', '2025')
+         */
+        function calculatePPMPeriod(spp, wso, periodType) {
+            if (!spp || !wso) return 'Unknown';
+            
+            // Define month names for consistent usage
+            const monthNames = ['january', 'february', 'march', 'april', 'may', 'june',
+                              'july', 'august', 'september', 'october', 'november', 'december'];
+            const shortMonthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun',
+                                   'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+            
+            // Convert wso to string if it's a Date object or other type
+            let wsoStr = '';
+            if (wso instanceof Date) {
+                // Format Date object as YYYY-MM-DD
+                wsoStr = wso.toISOString().split('T')[0];
+            } else if (typeof wso === 'number') {
+                // Handle Excel serial date number
+                const excelDate = new Date((wso - 25569) * 86400 * 1000);
+                wsoStr = excelDate.toISOString().split('T')[0];
+            } else if (typeof wso === 'string') {
+                wsoStr = wso.trim();
+            } else {
+                console.warn('🔍 PPM: Invalid WSO type:', typeof wso, wso);
+                return 'Unknown';
+            }
+            
+            // Convert spp to string if it's a Date object or other type
+            let sppStr = '';
+            if (spp instanceof Date) {
+                // If SPP is a Date object, extract month name
+                sppStr = monthNames[spp.getMonth()];
+            } else if (typeof spp === 'number') {
+                // Handle Excel serial date number
+                const excelDate = new Date((spp - 25569) * 86400 * 1000);
+                sppStr = monthNames[excelDate.getMonth()];
+            } else if (typeof spp === 'string') {
+                sppStr = spp.trim();
+            } else {
+                console.warn('🔍 PPM: Invalid SPP type:', typeof spp, spp);
+                return 'Unknown';
+            }
+            
+            // Parse the month from Service Provision Period
+            
+            const sppLower = sppStr.toLowerCase().trim();
+            let monthIndex = monthNames.findIndex(month => month === sppLower);
+            if (monthIndex === -1) {
+                monthIndex = shortMonthNames.findIndex(month => month === sppLower);
+            }
+            
+            if (monthIndex === -1) {
+                console.warn('🔍 PPM: Could not parse month from SPP:', sppStr);
+                return 'Unknown';
+            }
+            
+            // Parse the year from Week starts on
+            let wsoDate = null;
+            
+            // Try different WSO formats
+            if (wsoStr.match(/^\d{2}[\/\-]\d{2}[\/\-]\d{4}$/)) {
+                // DD/MM/YYYY or DD-MM-YYYY format
+                const [day, month, year] = wsoStr.split(/[\/\-]/);
+                wsoDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+            } else if (wsoStr.match(/^\d{4}[\/\-]\d{2}[\/\-]\d{2}$/)) {
+                // YYYY/MM/DD or YYYY-MM-DD format
+                wsoDate = new Date(wsoStr);
+            } else {
+                // Try direct parsing
+                wsoDate = new Date(wsoStr);
+            }
+            
+            if (!wsoDate || isNaN(wsoDate.getTime())) {
+                console.warn('🔍 PPM: Could not parse date from WSO:', wsoStr);
+                return 'Unknown';
+            }
+            
+            // Calculate year using business logic
+            let year = wsoDate.getFullYear();
+            
+            // Special case for January: if WSO month is December, add 1 to year
+            if (monthIndex === 0 && wsoDate.getMonth() === 11) { // January SPP and December WSO
+                year = year + 1;
+                console.log(`🔍 PPM: January SPP with December WSO - using year ${year}`);
+            }
+            
+            // Return based on period type
+            if (periodType === 'Month') {
+                return `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+            } else if (periodType === 'Year') {
+                return `${year}`;
+            }
+            
+            return 'Unknown';
+        }
+        
         function updateEmployeePeriod(newPeriod) {
             window.employeePeriodSelection = newPeriod;
             // Regenerate the current modal content
@@ -1533,15 +1649,30 @@
                     type = projectType.includes('MAINTENANCE') || projectType.includes('SUPPORT') || projectType.includes('OPERATIONS') ? 'RTC' : 'CTC';
                 }
                 
-                // Parse date for period using centralized helper
-                let dateStr = '';
+                // Use standardized field names (normalized during Excel parsing)
+                let periodKey = '';
                 if (period === 'Week') {
-                    dateStr = item['Week starts on'] || item.weekStartsOn || item.week || '';
+                    const dateStr = item.weekStartsOn || item['Week starts on'] || '';
+                    periodKey = parseI2EDate(dateStr, period);
                 } else {
-                    dateStr = item['Month of invoice'] || item.month || item['Month'] || item['Period'] || item.period || '';
+                    // For Month/Year: Use Service Provision Period (SPP) + Week starts on (WSO) 
+                    const spp = item.serviceProvisionPeriod || item['Service provision period'] || '';
+                    const wso = item.weekStartsOn || item['Week starts on'] || '';
+                    
+                    if (spp && wso) {
+                        periodKey = calculatePPMPeriod(spp, wso, period);
+                    } else {
+                        // Fallback to old logic if fields missing
+                        const dateStr = item['Month of invoice'] || item.month || item['Month'] || item['Period'] || item.period || '';
+                        periodKey = parseI2EDate(dateStr, period);
+                    }
+                    
+                    // DEBUG: Log field availability for troubleshooting
+                    if (periodKey === 'Unknown') {
+                        console.log('🔍 PPM DEBUG (RTC/CTC View) - SPP:', spp, 'WSO:', wso);
+                        console.log('🔍 PPM DEBUG (RTC/CTC View) - Available fields:', Object.keys(item));
+                    }
                 }
-                
-                const periodKey = parseI2EDate(dateStr, period);
                 allPeriods.add(periodKey);
                 
                 // Initialize data structures

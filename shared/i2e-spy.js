@@ -936,18 +936,21 @@ async function exportSpyData() {
         
         if (percentUsed > 80) {
             if (confirm(`📊 Excel export successful!\n\nStorage usage: ${percentUsed}% (${stats.sizes.totalMB} MB)\n\nWould you like to clear the cache to free up space?\n\n⚠️ This will delete all cached invoice data.`)) {
-                if (clearCache()) {
-                    console.log('✅ Cache cleared successfully after export!');
-                    closeSpyModal();
-                    
-                    // Call app-specific refresh function if available
-                    if (typeof refreshAfterCacheClear === 'function') {
-                        refreshAfterCacheClear();
-                    } else {
-                        // Default: reload page
-                        location.reload();
+                try {
+                    if (await clearCache()) {
+                        console.log('✅ Cache cleared successfully after export!');
+                        closeSpyModal();
+                        
+                        // Call app-specific refresh function if available
+                        if (typeof refreshAfterCacheClear === 'function') {
+                            refreshAfterCacheClear();
+                        } else {
+                            // Default: reload page
+                            location.reload();
+                        }
                     }
-                } else {
+                } catch (error) {
+                    console.error('❌ Error clearing cache after export:', error);
                     alert('❌ Error clearing cache after export!');
                 }
             }
@@ -1120,23 +1123,29 @@ async function saveWorkbook(workbook, filename) {
 /**
  * Clear all cache with confirmation
  */
-function clearCacheWithConfirm() {
+async function clearCacheWithConfirm() {
     if (confirm('🚨 Are you sure you want to clear ALL cache data?\n\nThis will delete all pending, approved, and rejected invoices.\n\nThis action cannot be undone!')) {
-        if (clearCache()) {
-            console.log('✅ Cache cleared successfully!');
-            closeSpyModal();
-            
-            // Call app-specific refresh function if available
-            if (typeof refreshAfterCacheClear === 'function') {
-                refreshAfterCacheClear();
+        try {
+            if (await clearCache()) {
+                console.log('✅ Cache cleared successfully!');
+                closeSpyModal();
+                
+                // Call app-specific refresh function if available
+                if (typeof refreshAfterCacheClear === 'function') {
+                    refreshAfterCacheClear();
+                } else {
+                    // Default: reload page
+                    location.reload();
+                }
+                
+                logInfo('🕵️ Cache cleared successfully');
             } else {
-                // Default: reload page
-                location.reload();
+                console.error('❌ Error clearing cache!');
+                logError('🕵️ Cache clear failed');
             }
-            
-            logInfo('🕵️ Cache cleared successfully');
-        } else {
-            console.error('❌ Error clearing cache!');
+        } catch (error) {
+            console.error('❌ Error clearing cache:', error);
+            alert('Error clearing cache: ' + error.message);
             logError('🕵️ Cache clear failed');
         }
     }
@@ -1145,11 +1154,17 @@ function clearCacheWithConfirm() {
 /**
  * Clear Excel cache with confirmation
  */
-function clearExcelCacheWithConfirm() {
+async function clearExcelCacheWithConfirm() {
     if (confirm('📊 Are you sure you want to clear Excel file cache?\n\nThis will delete all uploaded cost data files (PPM, EXT SAP, I2E data).\n\nThis action cannot be undone!')) {
         try {
-            // Clear the Excel/cost data cache
+            // Clear the Excel/cost data cache from localStorage (legacy)
             localStorage.removeItem('i2e_cost_data_cache');
+            
+            // Also clear from IndexedDB (where it's actually stored now)
+            if (typeof removeFromIndexedDB === 'function') {
+                await removeFromIndexedDB('i2e_cost_data_cache');
+                console.log('✅ Excel cache cleared from IndexedDB!');
+            }
             
             console.log('✅ Excel cache cleared successfully!');
             closeSpyModal();
@@ -1162,7 +1177,7 @@ function clearExcelCacheWithConfirm() {
                 location.reload();
             }
             
-            logInfo('🕵️ Excel cache cleared successfully');
+            logInfo('🕵️ Excel cache cleared successfully (localStorage + IndexedDB)');
         } catch (error) {
             console.error('❌ Error clearing Excel cache:', error);
             alert('Error clearing Excel cache: ' + error.message);

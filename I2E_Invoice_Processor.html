@@ -1304,7 +1304,8 @@
             // Generate unique position number for the new line item
             const existingItems = extractedData.filter(item => 
                 item.invoiceNumber === invoiceNumber && 
-                item.serviceProvisionPeriod && item.serviceProvisionPeriod.trim() === normalizedPeriod
+                item.serviceProvisionPeriod && 
+                (typeof item.serviceProvisionPeriod === 'string' ? item.serviceProvisionPeriod.trim() : String(item.serviceProvisionPeriod).trim()) === normalizedPeriod
             );
             
             console.log('📊 Existing items found:', existingItems.length);
@@ -1346,7 +1347,8 @@
             const allInvoiceItems = extractedData.filter(item => item.invoiceNumber === invoiceNumber);
             console.log('🔧 Detailed period comparison:');
             allInvoiceItems.forEach((item, idx) => {
-                const matches = item.serviceProvisionPeriod && item.serviceProvisionPeriod.trim() === normalizedPeriod;
+                const matches = item.serviceProvisionPeriod && 
+                    (typeof item.serviceProvisionPeriod === 'string' ? item.serviceProvisionPeriod.trim() : String(item.serviceProvisionPeriod).trim()) === normalizedPeriod;
                 console.log(`  ${idx}: "${item.serviceProvisionPeriod}" === "${normalizedPeriod}" ? ${matches}`);
             });
             
@@ -2040,8 +2042,16 @@
         
         // ===== INITIALIZATION =====
         document.addEventListener('DOMContentLoaded', function() {
-            // Inject spy icon into header
-            injectSpyIcon();
+            // Inject spy icon into header (with error handling)
+            try {
+                if (typeof injectSpyIcon === 'function') {
+                    injectSpyIcon();
+                } else {
+                    console.warn('⚠️ injectSpyIcon function not available');
+                }
+            } catch (error) {
+                console.error('❌ Error injecting spy icon:', error);
+            }
         });
         
         console.log('🎉 I2E Invoice Processor loaded successfully!');

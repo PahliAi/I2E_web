@@ -413,6 +413,30 @@ function getWeekNumber(date) {
 }
 
 /**
+ * Calculate ISO week number AND year for a given date
+ * Returns both week number and the ISO week year (which can differ from calendar year)
+ * @param {Date} date - Date object
+ * @returns {Object} {week: number, year: number}
+ */
+function getWeekNumberAndYear(date) {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    
+    // Move to the Thursday of this week - this determines which year the week belongs to
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const isoYear = d.getUTCFullYear();
+    
+    // Calculate week number within that ISO year
+    const yearStart = new Date(Date.UTC(isoYear, 0, 1));
+    const weekNum = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    
+    return {
+        week: weekNum,
+        year: isoYear
+    };
+}
+
+/**
  * Universal date parser for I2E application
  * Handles various date formats and returns standardized period keys
  * @param {any} dateValue - Raw date value from Excel or other sources
@@ -447,8 +471,8 @@ function parseI2EDate(dateValue, periodType = 'Month') {
         }
         
         if (date && !isNaN(date.getTime())) {
-            const weekNum = getWeekNumber(date);
-            return `${date.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+            const weekData = getWeekNumberAndYear(date);
+            return `${weekData.year}-W${String(weekData.week).padStart(2, '0')}`;
         }
     } else {
         // For Month/Year periods
@@ -758,6 +782,85 @@ async function clearIndexedDBByPrefix(prefix) {
 }
 
 /**
+ * Normalize Excel field names to standardized format
+ * Maps various field name formats to consistent internal names
+ * @param {Object} rawRow - Raw row from Excel with original field names
+ * @returns {Object} Row with normalized field names
+ */
+function normalizeExcelFieldNames(rawRow) {
+    const fieldMap = {
+        // Service Provision Period variations
+        'serviceProvisionPeriod': ['service provision period', 'service_provision_period', 'serviceprovisionperiod', 'month of invoice'],
+        // Week Starts On variations  
+        'weekStartsOn': ['week starts on', 'week_starts_on', 'weekstartson'],
+        // User variations
+        'user': ['user', 'username', 'employee', 'name'],
+        // Cost variations  
+        'costEuro': ['cost €', 'cost', 'value', 'amount'],
+        // Total/Hours variations
+        'total': ['total', 'hours', 'quantity'],
+        // Project Type variations
+        'projectType': ['project type', 'project_type', 'type'],
+        // Resource Manager variations
+        'resourceManager': ['resource manager', 'manager', 'rm'],
+        // WBS Element variations
+        'wbsElement': ['wbs element id', 'wbs', 'wbs_element'],
+        // Project Name variations
+        'projectName': ['project name', 'project', 'project_name'],
+        // Job Title/Role variations
+        'jobTitle': ['job title', 'role', 'position', 'title']
+    };
+    
+    const normalizedRow = {};
+    const availableFields = Object.keys(rawRow);
+    
+    // First, copy all original fields
+    Object.assign(normalizedRow, rawRow);
+    
+    // Then add normalized field names
+    for (const [standardName, variations] of Object.entries(fieldMap)) {
+        for (const variation of variations) {
+            const matchingField = availableFields.find(field => 
+                field.toLowerCase().replace(/[^a-z0-9]/g, '') === variation.replace(/[^a-z0-9]/g, '')
+            );
+            
+            if (matchingField && rawRow[matchingField]) {
+                normalizedRow[standardName] = rawRow[matchingField];
+                break; // Use first match found
+            }
+        }
+    }
+    
+    return normalizedRow;
+}
+
+/**
+ * Clear all I2E data from both localStorage and IndexedDB
+ * Comprehensive cleanup function for complete cache clearing
+ * @returns {Promise<boolean>} True if cleared successfully
+ */
+async function clearAllI2EData() {
+    try {
+        console.log('🧹 Starting comprehensive I2E data cleanup...');
+        
+        // Clear localStorage with i2e_ prefix
+        const localStorageCleared = clearStorageByPrefix('i2e_');
+        console.log(`📦 localStorage: Cleared ${localStorageCleared} items`);
+        
+        // Clear IndexedDB with i2e_ prefix
+        const indexedDBCleared = await clearIndexedDBByPrefix('i2e_');
+        console.log(`💾 IndexedDB: Cleared ${indexedDBCleared} items`);
+        
+        console.log('✅ Comprehensive I2E data cleanup completed!');
+        return true;
+        
+    } catch (error) {
+        console.error('❌ Error during comprehensive cleanup:', error);
+        return false;
+    }
+}
+
+/**
  * Hybrid storage function - tries IndexedDB first for cost data, falls back to localStorage
  * This provides compatibility during migration period
  * @param {string} key - Storage key
@@ -832,6 +935,7 @@ if (typeof module !== 'undefined' && module.exports) {
         parseExcelNumericValue,
         parseI2EDate,
         getWeekNumber,
+        getWeekNumberAndYear,
         
         // Validation
         isEmpty,
@@ -841,10 +945,11 @@ if (typeof module !== 'undefined' && module.exports) {
         // IndexedDB utilities
         initializeIndexedDB,
         saveToIndexedDB,
-        loadFromIndexedDB,
-        removeFromIndexedDB,
+        loadFromIndexedDB,        removeFromIndexedDB,
         clearIndexedDBByPrefix,
-        loadCostDataFromStorage
+        loadCostDataFromStorage,
+        clearAllI2EData,
+        normalizeExcelFieldNames
     };
 }
 
