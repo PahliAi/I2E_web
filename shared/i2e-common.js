@@ -399,6 +399,116 @@ function parseExcelNumericValue(cellValue) {
     return parseFloat(cellValue) || 0;
 }
 
+/**
+ * Calculate ISO week number for a given date
+ * @param {Date} date - Date object
+ * @returns {number} ISO week number (1-53)
+ */
+function getWeekNumber(date) {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+/**
+ * Universal date parser for I2E application
+ * Handles various date formats and returns standardized period keys
+ * @param {any} dateValue - Raw date value from Excel or other sources
+ * @param {string} periodType - 'Week', 'Month', or 'Year'
+ * @returns {string} Standardized period key (e.g., '2025-10', '2025', 'Unknown')
+ */
+function parseI2EDate(dateValue, periodType = 'Month') {
+    if (!dateValue) return 'Unknown';
+    
+    const dateStr = String(dateValue).trim();
+    if (!dateStr) return 'Unknown';
+    
+    let date = null;
+    
+    // Try different date formats
+    if (periodType === 'Week') {
+        // For weeks, expect full date strings
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            // YYYY-MM-DD format
+            date = new Date(dateStr);
+        } else if (dateStr.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+            // DD/MM/YYYY format (European)
+            const [day, month, year] = dateStr.split('/');
+            date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+        } else if (dateStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+            // DD-MM-YYYY format
+            const [day, month, year] = dateStr.split('-');
+            date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+        } else {
+            // Try direct Date parsing
+            date = new Date(dateStr);
+        }
+        
+        if (date && !isNaN(date.getTime())) {
+            const weekNum = getWeekNumber(date);
+            return `${date.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+        }
+    } else {
+        // For Month/Year periods
+        
+        // First try month names (from PPM data)
+        const monthNames = ['january', 'february', 'march', 'april', 'may', 'june',
+                          'july', 'august', 'september', 'october', 'november', 'december'];
+        const shortMonthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun',
+                               'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+        
+        const lowerDateStr = dateStr.toLowerCase();
+        let monthIndex = monthNames.findIndex(month => month === lowerDateStr);
+        if (monthIndex === -1) {
+            monthIndex = shortMonthNames.findIndex(month => month === lowerDateStr);
+        }
+        
+        if (monthIndex !== -1) {
+            // Found month name - use current year
+            const currentYear = new Date().getFullYear();
+            date = new Date(currentYear, monthIndex, 1);
+        } else if (dateStr.match(/^\d+$/)) {
+            // Numeric period (from EXT SAP data)
+            const periodNum = parseInt(dateStr);
+            if (periodNum >= 1 && periodNum <= 12) {
+                const currentYear = new Date().getFullYear();
+                date = new Date(currentYear, periodNum - 1, 1);
+            }
+        } else if (dateStr.match(/^\d{4}-\d{2}$/)) {
+            // YYYY-MM format
+            const [year, month] = dateStr.split('-');
+            date = new Date(parseInt(year), parseInt(month) - 1, 1);
+        } else if (dateStr.match(/^\d{2}\/\d{4}$/)) {
+            // MM/YYYY format
+            const [month, year] = dateStr.split('/');
+            date = new Date(parseInt(year), parseInt(month) - 1, 1);
+        } else if (dateStr.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+            // DD/MM/YYYY format (European) - extract month
+            const [day, month, year] = dateStr.split('/');
+            date = new Date(parseInt(year), parseInt(month) - 1, 1);
+        } else if (dateStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+            // DD-MM-YYYY format - extract month
+            const [day, month, year] = dateStr.split('-');
+            date = new Date(parseInt(year), parseInt(month) - 1, 1);
+        } else {
+            // Try direct Date parsing as fallback
+            date = new Date(dateStr);
+        }
+        
+        if (date && !isNaN(date.getTime())) {
+            if (periodType === 'Month') {
+                return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            } else if (periodType === 'Year') {
+                return `${date.getFullYear()}`;
+            }
+        }
+    }
+    
+    return 'Unknown';
+}
+
 // ===== VALIDATION UTILITIES =====
 
 /**
@@ -720,6 +830,8 @@ if (typeof module !== 'undefined' && module.exports) {
         parseCurrencyValue,
         roundToDecimals,
         parseExcelNumericValue,
+        parseI2EDate,
+        getWeekNumber,
         
         // Validation
         isEmpty,
