@@ -379,8 +379,19 @@ function parseExcelNumericValue(cellValue) {
         return 0;
     }
     
+    // Handle Excel error values (#N/A, #REF!, #DIV/0!, etc.)
+    if (typeof cellValue === 'object' && cellValue.error !== undefined) {
+        console.warn('📊 Excel error in numeric cell:', cellValue.error);
+        return 0;
+    }
+    
     // Handle Excel formula objects
     if (typeof cellValue === 'object' && cellValue.result !== undefined) {
+        // Check if formula result is also an error
+        if (typeof cellValue.result === 'object' && cellValue.result.error !== undefined) {
+            console.warn('📊 Excel formula error:', cellValue.result.error);
+            return 0;
+        }
         // ExcelJS formula object - use the calculated result
         return parseFloat(cellValue.result) || 0;
     }
@@ -392,11 +403,205 @@ function parseExcelNumericValue(cellValue) {
     
     // Handle string values (try to parse as float)
     if (typeof cellValue === 'string') {
+        // Check for Excel error strings
+        if (cellValue.startsWith('#')) {
+            console.warn('📊 Excel error string in numeric cell:', cellValue);
+            return 0;
+        }
         return parseFloat(cellValue) || 0;
     }
     
     // Fallback
     return parseFloat(cellValue) || 0;
+}
+
+/**
+ * Parse text value from Excel cell (handles formulas and regular values)
+ * @param {any} cellValue - Raw cell value from ExcelJS
+ * @returns {string} Parsed text value
+ */
+function parseExcelTextValue(cellValue) {
+    if (cellValue === null || cellValue === undefined) {
+        return '';
+    }
+    
+    // Handle Excel error values (#N/A, #REF!, #DIV/0!, etc.)
+    if (typeof cellValue === 'object' && cellValue.error !== undefined) {
+        console.warn('📊 Excel error in text cell:', cellValue.error);
+        return '';
+    }
+    
+    // Handle Excel formula objects
+    if (typeof cellValue === 'object' && cellValue.result !== undefined) {
+        // Check if formula result is an error
+        if (typeof cellValue.result === 'object' && cellValue.result.error !== undefined) {
+            console.warn('📊 Excel formula error in text:', cellValue.result.error);
+            return '';
+        }
+        // ExcelJS formula object - use the calculated result
+        return String(cellValue.result || '').trim();
+    }
+    
+    // Handle Date objects
+    if (cellValue instanceof Date) {
+        return cellValue.toISOString().split('T')[0];
+    }
+    
+    // Handle boolean values
+    if (typeof cellValue === 'boolean') {
+        return cellValue ? 'TRUE' : 'FALSE';
+    }
+    
+    // Handle regular values
+    const textValue = String(cellValue || '').trim();
+    
+    // Check for Excel error strings
+    if (textValue.startsWith('#')) {
+        console.warn('📊 Excel error string in text cell:', textValue);
+        return '';
+    }
+    
+    return textValue;
+}
+
+/**
+ * Parse date value from Excel cell (handles formulas, serial numbers, and date objects)
+ * @param {any} cellValue - Raw cell value from ExcelJS
+ * @returns {Date|null} Parsed Date object or null if invalid
+ */
+function parseExcelDateValue(cellValue) {
+    if (cellValue === null || cellValue === undefined) {
+        return null;
+    }
+    
+    // Handle Excel error values
+    if (typeof cellValue === 'object' && cellValue.error !== undefined) {
+        console.warn('📊 Excel error in date cell:', cellValue.error);
+        return null;
+    }
+    
+    // Handle Excel formula objects
+    if (typeof cellValue === 'object' && cellValue.result !== undefined) {
+        // Check if formula result is an error
+        if (typeof cellValue.result === 'object' && cellValue.result.error !== undefined) {
+            console.warn('📊 Excel formula error in date:', cellValue.result.error);
+            return null;
+        }
+        // Recursively parse the formula result
+        return parseExcelDateValue(cellValue.result);
+    }
+    
+    // Handle Date objects
+    if (cellValue instanceof Date) {
+        return isNaN(cellValue.getTime()) ? null : cellValue;
+    }
+    
+    // Handle Excel serial date numbers (days since 1900-01-01, accounting for Excel's leap year bug)
+    if (typeof cellValue === 'number') {
+        if (cellValue < 1 || cellValue > 2958465) { // Valid Excel date range
+            return null;
+        }
+        const excelDate = new Date((cellValue - 25569) * 86400 * 1000);
+        return isNaN(excelDate.getTime()) ? null : excelDate;
+    }
+    
+    // Handle string date values
+    if (typeof cellValue === 'string') {
+        const trimmed = cellValue.trim();
+        if (!trimmed || trimmed.startsWith('#')) {
+            return null;
+        }
+        const date = new Date(trimmed);
+        return isNaN(date.getTime()) ? null : date;
+    }
+    
+    return null;
+}
+
+/**
+ * Parse percentage value from Excel cell (handles both 0.15 and 15% formats)
+ * @param {any} cellValue - Raw cell value from ExcelJS
+ * @returns {number} Percentage as decimal (0.15 for 15%)
+ */
+function parseExcelPercentageValue(cellValue) {
+    if (cellValue === null || cellValue === undefined) {
+        return 0;
+    }
+    
+    // Handle Excel error values
+    if (typeof cellValue === 'object' && cellValue.error !== undefined) {
+        console.warn('📊 Excel error in percentage cell:', cellValue.error);
+        return 0;
+    }
+    
+    // Handle Excel formula objects
+    if (typeof cellValue === 'object' && cellValue.result !== undefined) {
+        if (typeof cellValue.result === 'object' && cellValue.result.error !== undefined) {
+            console.warn('📊 Excel formula error in percentage:', cellValue.result.error);
+            return 0;
+        }
+        return parseExcelPercentageValue(cellValue.result);
+    }
+    
+    // Handle numeric values
+    if (typeof cellValue === 'number') {
+        return cellValue; // Excel usually stores percentages as decimals (0.15 for 15%)
+    }
+    
+    // Handle string percentage values
+    if (typeof cellValue === 'string') {
+        const trimmed = cellValue.trim();
+        if (trimmed.startsWith('#')) {
+            console.warn('📊 Excel error string in percentage cell:', trimmed);
+            return 0;
+        }
+        
+        if (trimmed.endsWith('%')) {
+            // Convert "15%" to 0.15
+            const numStr = trimmed.slice(0, -1);
+            const num = parseFloat(numStr);
+            return isNaN(num) ? 0 : num / 100;
+        }
+        
+        const num = parseFloat(trimmed);
+        return isNaN(num) ? 0 : num;
+    }
+    
+    return 0;
+}
+
+/**
+ * Check if Excel cell value represents a truly empty cell (not zero)
+ * @param {any} cellValue - Raw cell value from ExcelJS
+ * @returns {boolean} True if cell is genuinely empty
+ */
+function isExcelCellEmpty(cellValue) {
+    if (cellValue === null || cellValue === undefined) {
+        return true;
+    }
+    
+    // Handle Excel formula objects
+    if (typeof cellValue === 'object' && cellValue.result !== undefined) {
+        return isExcelCellEmpty(cellValue.result);
+    }
+    
+    // Handle error values as empty
+    if (typeof cellValue === 'object' && cellValue.error !== undefined) {
+        return true;
+    }
+    
+    // Handle string values
+    if (typeof cellValue === 'string') {
+        const trimmed = cellValue.trim();
+        return trimmed === '' || trimmed.startsWith('#');
+    }
+    
+    // Number 0 is not empty, but NaN is
+    if (typeof cellValue === 'number') {
+        return isNaN(cellValue);
+    }
+    
+    return false;
 }
 
 /**
@@ -933,6 +1138,10 @@ if (typeof module !== 'undefined' && module.exports) {
         parseCurrencyValue,
         roundToDecimals,
         parseExcelNumericValue,
+        parseExcelTextValue,
+        parseExcelDateValue,
+        parseExcelPercentageValue,
+        isExcelCellEmpty,
         parseI2EDate,
         getWeekNumber,
         getWeekNumberAndYear,

@@ -1429,35 +1429,37 @@
             const shortMonthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun',
                                    'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
             
-            // Convert wso to string if it's a Date object or other type
-            let wsoStr = '';
+            // Convert wso to string using helper function that handles formulas
+            let wsoStr = parseExcelTextValue(wso);
+            
+            // Handle Date objects and serial numbers specifically for dates
             if (wso instanceof Date) {
-                // Format Date object as YYYY-MM-DD
                 wsoStr = wso.toISOString().split('T')[0];
             } else if (typeof wso === 'number') {
                 // Handle Excel serial date number
                 const excelDate = new Date((wso - 25569) * 86400 * 1000);
                 wsoStr = excelDate.toISOString().split('T')[0];
-            } else if (typeof wso === 'string') {
-                wsoStr = wso.trim();
-            } else {
-                console.warn('🔍 PPM: Invalid WSO type:', typeof wso, wso);
+            }
+            
+            if (!wsoStr) {
+                console.warn('🔍 PPM: Could not parse WSO:', wso);
                 return 'Unknown';
             }
             
-            // Convert spp to string if it's a Date object or other type
-            let sppStr = '';
+            // Convert spp to string using helper function that handles formulas
+            let sppStr = parseExcelTextValue(spp);
+            
+            // If SPP is still a Date after parsing, extract month name
             if (spp instanceof Date) {
-                // If SPP is a Date object, extract month name
                 sppStr = monthNames[spp.getMonth()];
             } else if (typeof spp === 'number') {
                 // Handle Excel serial date number
                 const excelDate = new Date((spp - 25569) * 86400 * 1000);
                 sppStr = monthNames[excelDate.getMonth()];
-            } else if (typeof spp === 'string') {
-                sppStr = spp.trim();
-            } else {
-                console.warn('🔍 PPM: Invalid SPP type:', typeof spp, spp);
+            }
+            
+            if (!sppStr) {
+                console.warn('🔍 PPM: Could not parse SPP:', spp);
                 return 'Unknown';
             }
             
