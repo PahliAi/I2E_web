@@ -940,18 +940,19 @@
                 return;
             }
             
-            // Update cost data display
-            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
-            if (costData.length > 0 && costCachedData) {
-                const fileNames = [...new Set(costData.map(item => item.sourceFile || 'Unknown file'))];
-                costCachedData.innerHTML = `
-                    <h5>📊 Cached Cost Data</h5>
-                    <p>${fileNames.slice(0, 3).join(', ')}${fileNames.length > 3 ? ` and ${fileNames.length - 3} more` : ''}</p>
-                `;
-                costCachedData.style.display = 'block';
-            } else if (costCachedData) {
-                costCachedData.style.display = 'none';
-            }
+            // Update cost data display (use async loading for large datasets)
+            loadCostDataFromStorage('i2e_cost_data_cache', []).then(costData => {
+                if (costData.length > 0 && costCachedData) {
+                    const fileNames = [...new Set(costData.map(item => item.sourceFile || 'Unknown file'))];
+                    costCachedData.innerHTML = `
+                        <h5>📊 Cached Cost Data</h5>
+                        <p>${fileNames.slice(0, 3).join(', ')}${fileNames.length > 3 ? ` and ${fileNames.length - 3} more` : ''}</p>
+                    `;
+                    costCachedData.style.display = 'block';
+                } else if (costCachedData) {
+                    costCachedData.style.display = 'none';
+                }
+            });
             
             // Update invoice data display
             const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
@@ -966,7 +967,7 @@
             }
         }
         
-        function updateContinueButton() {
+        async function updateContinueButton() {
             const continueButton = document.getElementById('continueButton');
             
             if (!selectedWorkflow) {
@@ -974,7 +975,7 @@
                 return;
             }
             
-            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            const costData = await loadCostDataFromStorage('i2e_cost_data_cache', []);
             const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
             const hasUploadedCost = selectedFiles.cost.length > 0;
             const hasUploadedInvoices = selectedFiles.invoice.length > 0;
@@ -1412,18 +1413,30 @@
                     const row = rows[i];
                     if (!row) continue;
                     
-                    // Create object with original Excel column names
-                    const item = {};
+                    // Create optimized object with only essential PPM columns to reduce storage
+                    const item = {
+                        source: 'PPM',
+                        sourceFile: sourceFile,
+                        type: 'Internal'
+                    };
+                    
+                    // Essential PPM columns for cost views and analysis
+                    const essentialColumns = [
+                        'WBS Element ID', 'Project Name', 'User', 'Total', 'Cost €', 
+                        'Week starts on', 'Month of invoice', 'Resource Manager', 
+                        'Project Type', 'Job Title'
+                    ];
+                    
+                    // Keep all essential columns plus any that contain "Role" in the name
                     for (let j = 0; j < headerRow.length; j++) {
-                        if (headerRow[j] && row[j] !== undefined) {
-                            item[headerRow[j]] = row[j];
+                        const headerName = headerRow[j];
+                        if (headerName && row[j] !== undefined) {
+                            if (essentialColumns.includes(headerName) || 
+                                headerName.toLowerCase().includes('role')) {
+                                item[headerName] = row[j];
+                            }
                         }
                     }
-                    
-                    // Add metadata
-                    item.source = 'PPM';
-                    item.sourceFile = sourceFile;
-                    item.type = 'Internal';
                     
                     // Process values
                     const wbsValue = (wbsIndex >= 0 && !isBlankCell(row[wbsIndex])) ? row[wbsIndex].toString().trim() : '';
@@ -1494,24 +1507,31 @@
                     
                     totalRows++;
                     
-                    // Create object with original Excel column names
-                    const item = {};
+                    // Create optimized object with only essential EXT SAP columns to reduce storage
+                    const item = {
+                        source: 'EXT SAP',
+                        sourceFile: sourceFile,
+                        type: 'External'
+                    };
                     
-                    // Map all columns to their original names
+                    // Essential EXT SAP columns for cost views and validation (including Fiscal Year)
+                    const essentialColumns = [
+                        'WBS Element', 'CO object name', 'Value', 'Name of offsetting account',
+                        'Period', 'Fiscal Year', 'FiscalYear', 'Cost Element', 'Cost element name',
+                        'Document', 'Posting Date'
+                    ];
+                    
+                    // Keep only essential columns
                     for (let j = 0; j < headerRow.length; j++) {
-                        if (headerRow[j] && row[j] !== undefined) {
-                            item[headerRow[j]] = row[j];
+                        const headerName = headerRow[j];
+                        if (headerName && row[j] !== undefined && essentialColumns.includes(headerName)) {
+                            item[headerName] = row[j];
                         }
                     }
                     
-                    // Add metadata
-                    item.source = 'EXT SAP';
-                    item.sourceFile = sourceFile;
-                    item.type = 'External';
-                    
                     // Only add if has essential fields
                     const wbsValue = (wbsIndex >= 0 && row[wbsIndex]) ? row[wbsIndex].toString().trim() : '';
-                    const costValue = (valueIndex >= 0 && row[valueIndex]) ? parseFloat(row[valueIndex]) || 0 : 0;
+                    const costValue = (valueIndex >= 0 && row[valueIndex]) ? parseExcelNumericValue(row[valueIndex]) : 0;
                     
                     // Debug first few rows
                     if (i <= 5) {
@@ -1580,7 +1600,7 @@
                     
                     // Only add if has essential fields
                     const invoiceValue = (invoiceIndex >= 0 && row[invoiceIndex]) ? row[invoiceIndex].toString() : '';
-                    const costValue = (valueIndex >= 0 && row[valueIndex]) ? parseFloat(row[valueIndex]) || 0 : 0;
+                    const costValue = (valueIndex >= 0 && row[valueIndex]) ? parseExcelNumericValue(row[valueIndex]) : 0;
                     
                     if (invoiceValue && costValue !== 0) {
                         data.push(item);
@@ -1595,30 +1615,36 @@
         }
         
         async function saveCostDataToCache(results, sourceFile) {
-            const existingData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            // Use IndexedDB for large cost data storage
+            const existingData = await loadFromIndexedDB('i2e_cost_data_cache', []);
+            
+            // Remove existing entries from the same source file to prevent duplication
+            const filteredData = existingData.filter(item => item.sourceFile !== sourceFile);
+            console.log(`💾 Removed ${existingData.length - filteredData.length} existing entries from ${sourceFile} to prevent duplication`);
+            
             let newEntriesCount = 0;
             
             // Add new data and count entries
             if (results.ppm) {
-                existingData.push(...results.ppm);
+                filteredData.push(...results.ppm);
                 newEntriesCount += results.ppm.length;
                 console.log(`💾 Added ${results.ppm.length} PPM entries from ${sourceFile}`);
             }
             if (results.extSap) {
-                existingData.push(...results.extSap);
+                filteredData.push(...results.extSap);
                 newEntriesCount += results.extSap.length;
                 console.log(`💾 Added ${results.extSap.length} EXT SAP entries from ${sourceFile}`);
             }
             if (results.i2e) {
-                existingData.push(...results.i2e);
+                filteredData.push(...results.i2e);
                 newEntriesCount += results.i2e.length;
                 console.log(`💾 Added ${results.i2e.length} I2E entries from ${sourceFile}`);
             }
             
-            // Save to cache
-            saveToLocalStorage('i2e_cost_data_cache', existingData);
+            // Save to IndexedDB (much larger capacity than localStorage)
+            await saveToIndexedDB('i2e_cost_data_cache', filteredData);
             
-            console.log(`💾 Saved ${newEntriesCount} new entries from ${sourceFile}. Total cache: ${existingData.length} entries`);
+            console.log(`💾 Saved ${newEntriesCount} new entries from ${sourceFile}. Total cache: ${filteredData.length} entries`);
         }
         
         function showFileProcessingStatus(type, message, status = 'info') {

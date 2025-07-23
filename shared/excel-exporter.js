@@ -190,6 +190,9 @@ async function exportToExcelWithFields(data, selectedFields, allFields, filename
             createInvoiceStatusSheet(workbook, data);
         }
         
+        // Create individual invoice detail sheets
+        await createIndividualInvoiceDetailSheets(workbook, data);
+        
         // Generate filename and save
         const finalFilename = filename || generateFilename('I2E_Selected_Fields');
         await saveWorkbook(workbook, finalFilename);
@@ -669,6 +672,186 @@ function validateFieldSelection(selectedFields, allFields) {
     }
     
     return result;
+}
+
+/**
+ * Create individual invoice detail sheets for audit trail
+ * @param {Object} workbook - ExcelJS workbook
+ * @param {Array} data - Export data array
+ */
+async function createIndividualInvoiceDetailSheets(workbook, data) {
+    try {
+        // Get all unique invoices from the data
+        const invoiceMap = new Map();
+        data.forEach(row => {
+            if (row.invoiceNumber) {
+                if (!invoiceMap.has(row.invoiceNumber)) {
+                    invoiceMap.set(row.invoiceNumber, {
+                        invoiceNumber: row.invoiceNumber,
+                        projectId: row.projectId,
+                        customerId: row.customerId,
+                        dateOfInvoice: row.dateOfInvoice,
+                        monthOfInvoice: row.monthOfInvoice,
+                        approvalStatus: row.approvalStatus,
+                        approvalDate: row.approvalDate,
+                        approvedBy: row.approvedBy,
+                        comments: row.comments,
+                        lineItems: []
+                    });
+                }
+                invoiceMap.get(row.invoiceNumber).lineItems.push(row);
+            }
+        });
+
+        // Get detailed invoice data from cache to include cost comparison
+        const allInvoices = typeof getAllInvoices === 'function' ? getAllInvoices() : [];
+        
+        // Create a sheet for each invoice
+        for (const [invoiceNumber, invoiceInfo] of invoiceMap) {
+            // Find the full invoice data from cache
+            const fullInvoice = allInvoices.find(inv => inv.invoiceNumber === invoiceNumber);
+            
+            // Create safe sheet name (Excel limits: 31 chars, no special chars)
+            const safeSheetName = `Invoice_${invoiceNumber}`.substring(0, 31).replace(/[\\\/\?\*\[\]]/g, '_');
+            const sheet = workbook.addWorksheet(safeSheetName);
+            
+            // Invoice Header Section
+            sheet.addRow(['INVOICE DETAILS']);
+            sheet.addRow([]); // Empty row
+            
+            // Basic invoice information
+            sheet.addRow(['Invoice Number:', invoiceNumber]);
+            sheet.addRow(['Project ID:', invoiceInfo.projectId || 'Unknown']);
+            sheet.addRow(['Customer ID:', invoiceInfo.customerId || 'Unknown']);
+            sheet.addRow(['Invoice Date:', invoiceInfo.dateOfInvoice || 'Unknown']);
+            sheet.addRow(['Month of Invoice:', invoiceInfo.monthOfInvoice || 'Unknown']);
+            sheet.addRow(['Approval Status:', invoiceInfo.approvalStatus || 'Pending']);
+            
+            if (invoiceInfo.approvalDate) {
+                sheet.addRow(['Approval Date:', invoiceInfo.approvalDate]);
+            }
+            if (invoiceInfo.approvedBy) {
+                sheet.addRow(['Approved/Rejected By:', invoiceInfo.approvedBy]);
+            }
+            if (invoiceInfo.comments) {
+                sheet.addRow(['Comments:', invoiceInfo.comments]);
+            }
+            
+            sheet.addRow([]); // Empty row
+            
+            // Cost Comparison Section (if full invoice data is available)
+            if (fullInvoice && typeof calculateInvoiceCosts === 'function') {
+                try {
+                    const costs = calculateInvoiceCosts(fullInvoice, invoiceInfo.monthOfInvoice);
+                    
+                    sheet.addRow(['COST COMPARISON']);
+                    sheet.addRow(['Internal Cost (PPM):', costs.internalCost || 0, 'EUR']);
+                    sheet.addRow(['External Cost (EXT SAP):', costs.externalCost || 0, 'EUR']);
+                    sheet.addRow(['Total Expected Cost:', costs.totalCost || 0, 'EUR']);
+                    sheet.addRow(['Total Invoiced Amount:', costs.invoicedAmount || 0, 'EUR']);
+                    sheet.addRow(['Delta (Invoice - Cost):', costs.delta || 0, 'EUR']);
+                    sheet.addRow([]); // Empty row
+                    
+                    // Add detailed cost breakdown if available
+                    if (typeof getDetailedCostBreakdown === 'function') {
+                        const breakdown = getDetailedCostBreakdown(fullInvoice, invoiceInfo.monthOfInvoice);
+                        
+                        if (breakdown.ppmData && breakdown.ppmData.length > 0) {
+                            sheet.addRow(['PPM DATA MATCHES']);
+                            sheet.addRow(['Employee', 'Role', 'Rate', 'Cost', 'WBS', 'Month']);
+                            breakdown.ppmData.forEach(item => {
+                                sheet.addRow([
+                                    item.user || '',
+                                    item.role || '',
+                                    item.rate || 0,
+                                    item.cost || 0,
+                                    item.wbs || '',
+                                    item.month || ''
+                                ]);
+                            });
+                            sheet.addRow([]); // Empty row
+                        }
+                        
+                        if (breakdown.extSapData && breakdown.extSapData.length > 0) {
+                            sheet.addRow(['EXT SAP DATA MATCHES']);
+                            sheet.addRow(['Supplier', 'Value', 'Period', 'Fiscal Year', 'Document Date', 'Document Type', 'Document Number']);
+                            breakdown.extSapData.forEach(item => {
+                                sheet.addRow([
+                                    item.supplier || '',
+                                    item.value || 0,
+                                    item.period || '',
+                                    item.fiscalYear || '',
+                                    item.documentDate || '',
+                                    item.documentType || '',
+                                    item.documentNumber || ''
+                                ]);
+                            });
+                            sheet.addRow([]); // Empty row
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`Could not calculate costs for invoice ${invoiceNumber}:`, error);
+                }
+            }
+            
+            // Invoice Line Items Section
+            sheet.addRow(['INVOICE LINE ITEMS']);
+            
+            // Headers for line items
+            const lineItemHeaders = [
+                'Position Description', 'Position Quantity', 'Position Total', 
+                'Unit Price', 'Cost Type', 'Service Period', 'Currency'
+            ];
+            sheet.addRow(lineItemHeaders);
+            
+            // Add line item data
+            invoiceInfo.lineItems.forEach(item => {
+                sheet.addRow([
+                    item.positionDescription || '',
+                    item.positionQuantity || '',
+                    item.positionTotal || 0,
+                    item.unitPrice || '',
+                    item.typeCost || '',
+                    item.serviceProvisionPeriod || '',
+                    item.currency || 'EUR'
+                ]);
+            });
+            
+            // Style the sheet
+            // Header styling
+            const headerRow1 = sheet.getRow(1);
+            headerRow1.font = { bold: true, size: 14 };
+            headerRow1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D1FAE5' } };
+            
+            // Find and style section headers
+            sheet.eachRow((row, rowNumber) => {
+                const firstCell = row.getCell(1);
+                if (firstCell.value && typeof firstCell.value === 'string' && 
+                    (firstCell.value.includes('COST COMPARISON') || 
+                     firstCell.value.includes('INVOICE LINE ITEMS') ||
+                     firstCell.value.includes('PPM DATA MATCHES') ||
+                     firstCell.value.includes('EXT SAP DATA MATCHES'))) {
+                    row.font = { bold: true };
+                    row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F3F4F6' } };
+                }
+            });
+            
+            // Auto-fit columns
+            sheet.columns.forEach(column => {
+                let maxLength = 10;
+                column.eachCell({ includeEmpty: true }, (cell) => {
+                    const cellValue = cell.value ? cell.value.toString() : '';
+                    maxLength = Math.max(maxLength, cellValue.length);
+                });
+                column.width = Math.min(maxLength + 2, 50); // Max width of 50
+            });
+        }
+        
+        console.log(`✅ Created ${invoiceMap.size} individual invoice detail sheets`);
+        
+    } catch (error) {
+        console.error('❌ Error creating individual invoice detail sheets:', error);
+    }
 }
 
 // ===== EXPORT FOR MODULE USAGE =====

@@ -369,6 +369,36 @@ function roundToDecimals(num, decimals = 2) {
     return Math.round(num * factor) / factor;
 }
 
+/**
+ * Parse numeric value from Excel cell (handles formulas and regular values)
+ * @param {any} cellValue - Raw cell value from ExcelJS
+ * @returns {number} Parsed numeric value
+ */
+function parseExcelNumericValue(cellValue) {
+    if (cellValue === null || cellValue === undefined) {
+        return 0;
+    }
+    
+    // Handle Excel formula objects
+    if (typeof cellValue === 'object' && cellValue.result !== undefined) {
+        // ExcelJS formula object - use the calculated result
+        return parseFloat(cellValue.result) || 0;
+    }
+    
+    // Handle regular numeric values
+    if (typeof cellValue === 'number') {
+        return cellValue;
+    }
+    
+    // Handle string values (try to parse as float)
+    if (typeof cellValue === 'string') {
+        return parseFloat(cellValue) || 0;
+    }
+    
+    // Fallback
+    return parseFloat(cellValue) || 0;
+}
+
 // ===== VALIDATION UTILITIES =====
 
 /**
@@ -412,6 +442,249 @@ function isValidWBS(wbsCode) {
     return fullWbsRegex.test(standardized) || rtcProjectRegex.test(standardized);
 }
 
+// ===== INDEXEDDB UTILITIES =====
+
+/**
+ * IndexedDB wrapper for large data storage (cost data, invoice data)
+ * Provides localStorage-like interface but with much larger storage capacity
+ */
+
+let i2eDB = null;
+
+/**
+ * Initialize IndexedDB database
+ * @returns {Promise<IDBDatabase>} Database instance
+ */
+async function initializeIndexedDB() {
+    if (i2eDB) return i2eDB;
+    
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open('I2E_Database', 1);
+        
+        request.onerror = () => {
+            console.error('Failed to open IndexedDB:', request.error);
+            reject(request.error);
+        };
+        
+        request.onsuccess = () => {
+            i2eDB = request.result;
+            console.log('IndexedDB initialized successfully');
+            resolve(i2eDB);
+        };
+        
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            
+            // Create object stores for different data types
+            if (!db.objectStoreNames.contains('costData')) {
+                db.createObjectStore('costData', { keyPath: 'id' });
+            }
+            if (!db.objectStoreNames.contains('invoiceData')) {
+                db.createObjectStore('invoiceData', { keyPath: 'id' });
+            }
+            
+            console.log('IndexedDB object stores created');
+        };
+    });
+}
+
+/**
+ * Save large data to IndexedDB
+ * @param {string} key - Storage key
+ * @param {any} data - Data to save
+ * @returns {Promise<boolean>} True if saved successfully
+ */
+async function saveToIndexedDB(key, data) {
+    try {
+        const db = await initializeIndexedDB();
+        const transaction = db.transaction(['costData'], 'readwrite');
+        const store = transaction.objectStore('costData');
+        
+        const dataToStore = {
+            id: key,
+            data: data,
+            timestamp: new Date().toISOString(),
+            size: JSON.stringify(data).length
+        };
+        
+        return new Promise((resolve, reject) => {
+            const request = store.put(dataToStore);
+            
+            request.onsuccess = () => {
+                console.log(`💾 IndexedDB: Saved ${dataToStore.size} characters to key "${key}"`);
+                resolve(true);
+            };
+            
+            request.onerror = () => {
+                console.error(`💾 IndexedDB: Failed to save key "${key}":`, request.error);
+                reject(request.error);
+            };
+        });
+    } catch (error) {
+        console.error(`💾 IndexedDB: Error saving key "${key}":`, error);
+        return false;
+    }
+}
+
+/**
+ * Load large data from IndexedDB
+ * @param {string} key - Storage key
+ * @param {any} defaultValue - Default value if key not found
+ * @returns {Promise<any>} Retrieved data or default value
+ */
+async function loadFromIndexedDB(key, defaultValue = null) {
+    try {
+        const db = await initializeIndexedDB();
+        const transaction = db.transaction(['costData'], 'readonly');
+        const store = transaction.objectStore('costData');
+        
+        return new Promise((resolve, reject) => {
+            const request = store.get(key);
+            
+            request.onsuccess = () => {
+                if (request.result) {
+                    console.log(`💾 IndexedDB: Loaded ${request.result.size} characters from key "${key}"`);
+                    resolve(request.result.data);
+                } else {
+                    console.log(`💾 IndexedDB: Key "${key}" not found, using default value`);
+                    resolve(defaultValue);
+                }
+            };
+            
+            request.onerror = () => {
+                console.error(`💾 IndexedDB: Failed to load key "${key}":`, request.error);
+                resolve(defaultValue);
+            };
+        });
+    } catch (error) {
+        console.error(`💾 IndexedDB: Error loading key "${key}":`, error);
+        return defaultValue;
+    }
+}
+
+/**
+ * Remove data from IndexedDB
+ * @param {string} key - Storage key to remove
+ * @returns {Promise<boolean>} True if removed successfully
+ */
+async function removeFromIndexedDB(key) {
+    try {
+        const db = await initializeIndexedDB();
+        const transaction = db.transaction(['costData'], 'readwrite');
+        const store = transaction.objectStore('costData');
+        
+        return new Promise((resolve, reject) => {
+            const request = store.delete(key);
+            
+            request.onsuccess = () => {
+                console.log(`💾 IndexedDB: Removed key "${key}"`);
+                resolve(true);
+            };
+            
+            request.onerror = () => {
+                console.error(`💾 IndexedDB: Failed to remove key "${key}":`, request.error);
+                resolve(false);
+            };
+        });
+    } catch (error) {
+        console.error(`💾 IndexedDB: Error removing key "${key}":`, error);
+        return false;
+    }
+}
+
+/**
+ * Clear IndexedDB storage by prefix (similar to localStorage version)
+ * @param {string} prefix - Prefix to match for deletion
+ * @returns {Promise<number>} Number of items deleted
+ */
+async function clearIndexedDBByPrefix(prefix) {
+    try {
+        const db = await initializeIndexedDB();
+        const transaction = db.transaction(['costData'], 'readwrite');
+        const store = transaction.objectStore('costData');
+        
+        return new Promise((resolve, reject) => {
+            const getAllRequest = store.getAllKeys();
+            
+            getAllRequest.onsuccess = () => {
+                const keys = getAllRequest.result.filter(key => key.startsWith(prefix));
+                let deletedCount = 0;
+                
+                if (keys.length === 0) {
+                    resolve(0);
+                    return;
+                }
+                
+                keys.forEach((key, index) => {
+                    const deleteRequest = store.delete(key);
+                    
+                    deleteRequest.onsuccess = () => {
+                        deletedCount++;
+                        if (deletedCount === keys.length) {
+                            console.log(`💾 IndexedDB: Cleared ${deletedCount} keys with prefix "${prefix}"`);
+                            resolve(deletedCount);
+                        }
+                    };
+                    
+                    deleteRequest.onerror = () => {
+                        console.error(`💾 IndexedDB: Failed to delete key "${key}"`);
+                        deletedCount++;
+                        if (deletedCount === keys.length) {
+                            resolve(deletedCount);
+                        }
+                    };
+                });
+            };
+            
+            getAllRequest.onerror = () => {
+                console.error('💾 IndexedDB: Failed to get keys for prefix clearing');
+                resolve(0);
+            };
+        });
+    } catch (error) {
+        console.error(`💾 IndexedDB: Error clearing prefix "${prefix}":`, error);
+        return 0;
+    }
+}
+
+/**
+ * Hybrid storage function - tries IndexedDB first for cost data, falls back to localStorage
+ * This provides compatibility during migration period
+ * @param {string} key - Storage key
+ * @param {any} defaultValue - Default value if key not found
+ * @returns {Promise<any>} Retrieved data or default value
+ */
+async function loadCostDataFromStorage(key, defaultValue = []) {
+    // For cost data cache, use IndexedDB for better performance and capacity
+    if (key === 'i2e_cost_data_cache') {
+        try {
+            // First try IndexedDB
+            const indexedDBData = await loadFromIndexedDB(key, null);
+            if (indexedDBData !== null) {
+                return indexedDBData;
+            }
+            
+            // If not in IndexedDB, check localStorage and migrate
+            const localStorageData = loadFromLocalStorage(key, defaultValue);
+            if (localStorageData && localStorageData.length > 0) {
+                console.log(`📦 Migrating ${localStorageData.length} cost records from localStorage to IndexedDB`);
+                await saveToIndexedDB(key, localStorageData);
+                // Clean up localStorage after successful migration
+                localStorage.removeItem(key);
+                return localStorageData;
+            }
+            
+            return defaultValue;
+        } catch (error) {
+            console.error('Error loading cost data, falling back to localStorage:', error);
+            return loadFromLocalStorage(key, defaultValue);
+        }
+    }
+    
+    // For other data, use regular localStorage
+    return loadFromLocalStorage(key, defaultValue);
+}
+
 // ===== EXPORT FOR MODULE USAGE =====
 
 // If using as a module, export functions
@@ -446,11 +719,20 @@ if (typeof module !== 'undefined' && module.exports) {
         // Numbers/currency
         parseCurrencyValue,
         roundToDecimals,
+        parseExcelNumericValue,
         
         // Validation
         isEmpty,
         isValidEmail,
-        isValidWBS
+        isValidWBS,
+        
+        // IndexedDB utilities
+        initializeIndexedDB,
+        saveToIndexedDB,
+        loadFromIndexedDB,
+        removeFromIndexedDB,
+        clearIndexedDBByPrefix,
+        loadCostDataFromStorage
     };
 }
 

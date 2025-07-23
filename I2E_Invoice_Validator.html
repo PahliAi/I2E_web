@@ -78,7 +78,6 @@
                             
                             <!-- Buttons Row -->
                             <div style="display: flex; justify-content: center; gap: 1rem; margin-bottom: 1rem;">
-                                <button class="btn btn-success" onclick="exportValidationResults()" style="padding: 0.75rem 1.5rem;">📊 Export Results</button>
                                 <button class="btn btn-primary" id="validateProjectBtn" onclick="validateSelectedProject()" disabled style="padding: 0.75rem 2rem;">🔍 Validate Selected Project</button>
                             </div>
                             
@@ -229,7 +228,7 @@
             }
         }
 
-        function loadDataFromSession() {
+        async function loadDataFromSession() {
             try {
                 // First, try to load from session storage (uploaded data)
                 const savedData = sessionStorage.getItem('i2e-validation-data');
@@ -257,11 +256,11 @@
                     hasSessionData = true;
                 }
                 
-                // CRITICAL FIX: If no session data, try to load from localStorage (data uploaded on index page)
+                // CRITICAL FIX: If no session data, try to load from IndexedDB (data uploaded on index page)
                 if (!hasSessionData) {
-                    const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
+                    const costData = await loadFromIndexedDB('i2e_cost_data_cache', []);
                     
-                    console.log('🔍 Raw cost data from localStorage:', costData);
+                    console.log('🔍 Raw cost data from IndexedDB:', costData);
                     console.log('🔍 Cost data length:', costData.length);
                     
                     // Debug the actual data structure
@@ -388,7 +387,7 @@
 
         // ===== DEBUG FUNCTIONS =====
         
-        function debugValidatorCacheData() {
+        async function debugValidatorCacheData() {
             console.log('🔍 Debug Validator Cache Data:');
             console.log('Raw localStorage data:');
             console.log('  - i2e_pending_invoices:', localStorage.getItem('i2e_pending_invoices'));
@@ -400,7 +399,7 @@
             const pendingInvoices = getPendingInvoices();
             const approvedInvoices = getApprovedInvoices();
             const rejectedInvoices = getRejectedInvoices();
-            const costDataCache = loadFromLocalStorage('i2e_cost_data_cache', []);
+            const costDataCache = await loadFromIndexedDB('i2e_cost_data_cache', []);
             
             console.log('  - Pending invoices:', pendingInvoices);
             console.log('  - Approved invoices:', approvedInvoices);
@@ -423,13 +422,13 @@
         window.debugValidatorCacheData = debugValidatorCacheData;
 
         // ===== INITIALIZATION =====
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
             // Check URL parameters for navigation from main dashboard
             const urlParams = new URLSearchParams(window.location.search);
             const requestedView = urlParams.get('view');
             
             // Try to load data from session storage first
-            const hasSessionData = loadDataFromSession();
+            const hasSessionData = await loadDataFromSession();
             
             initializeValidator();
             
@@ -765,7 +764,7 @@
                 hasExtSap,
                 ppmCount: validationData.ppmData ? validationData.ppmData.length : 0,
                 extSapCount: validationData.extSapData ? validationData.extSapData.length : 0,
-                rawCostDataCache: localStorage.getItem('i2e_cost_data_cache')
+                rawCostDataCache: 'IndexedDB (async)'
             });
             
             return validationData && hasPPM && hasExtSap;
@@ -1380,7 +1379,7 @@
                         });
                     }
                     
-                    const cost = parseFloat(row['Cost €']) || 0;
+                    const cost = parseExcelNumericValue(row['Cost €']);
                     wbsMap.get(wbs).internalCost += cost;
                 });
                 console.log(`✅ Processed ${validationData.ppmData.length} PPM rows`);
@@ -1413,7 +1412,7 @@
                         });
                     }
                     
-                    const cost = parseFloat(row['Value']) || 0;
+                    const cost = parseExcelNumericValue(row['Value']);
                     wbsMap.get(wbs).externalCost += cost;
                     processedCount++;
                     
@@ -2177,7 +2176,7 @@
                             user: row.User || '-',
                             role: row['Role 2025'] || '-',
                             rate: row['Rate 2025'] || 0,
-                            cost: parseFloat(row['Cost €']) || 0,
+                            cost: parseExcelNumericValue(row['Cost €']),
                             project: row['Project Name'] || '-'
                         });
                     }
@@ -2210,7 +2209,7 @@
                                 period: period,
                                 fiscalYear: fiscalYear,
                                 supplier: row['Name of offsetting account'] || '-',
-                                value: parseFloat(row.Value) || 0,
+                                value: parseExcelNumericValue(row.Value),
                                 documentDate: row['Document Date'] || '-',
                                 documentType: row['Document type'] || '-',
                                 refDocumentNumber: row['Ref. document number'] || '-',
@@ -2442,7 +2441,7 @@
                     
                     // Match both WBS and Month name only (not year)
                     if (rowWbs === wbsCode && rowMonthOfInvoice === invoiceMonthName) {
-                        const cost = parseFloat(row['Cost €']) || 0;
+                        const cost = parseExcelNumericValue(row['Cost €']);
                         internalCost += cost;
                         ppmMatches++;
                         
@@ -2498,7 +2497,7 @@
                         
                         // Match WBS, Period (month), and Fiscal Year
                         if (rowWbs === wbsCode && period === targetPeriod && fiscalYear === targetFiscalYear) {
-                            const cost = parseFloat(row.Value) || 0;
+                            const cost = parseExcelNumericValue(row.Value);
                             externalCost += cost;
                             extSapMatches++;
                             
@@ -2751,7 +2750,7 @@
         
         // ===== DEBUG FUNCTIONS =====
         
-        function debugValidatorCacheData() {
+        async function debugValidatorCacheData() {
             console.log('🔍 Debug Validator Cache Data:');
             console.log('Raw localStorage data:');
             console.log('  - i2e_pending_invoices:', localStorage.getItem('i2e_pending_invoices'));

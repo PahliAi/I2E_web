@@ -105,17 +105,17 @@
         let costViewsFilteredData = [];
         
         // Initialize on page load
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
             // Inject spy icon into header
             injectSpyIcon();
-            initializeCostViews();
+            await initializeCostViews();
         });
         
-        function initializeCostViews() {
+        async function initializeCostViews() {
             console.log('🎯 Initializing cost views...');
             
-            // Load cost data from cache
-            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            // Load cost data from cache (supports both IndexedDB and localStorage)
+            const costData = await loadCostDataFromStorage('i2e_cost_data_cache', []);
             
             if (costData.length === 0) {
                 document.getElementById('costViewsNoData').style.display = 'block';
@@ -125,12 +125,12 @@
             // Initialize with all data
             costViewsFilteredData = costData;
             
-            updateCostViewProjectDropdown();
+            await updateCostViewProjectDropdown();
             refreshCostViews();
         }
         
-        function updateCostViewProjectDropdown() {
-            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
+        async function updateCostViewProjectDropdown() {
+            const costData = await loadCostDataFromStorage('i2e_cost_data_cache', []);
             const projectSelect = document.getElementById('costViewProjectSelect');
             const filterInput = document.getElementById('costViewProjectFilter');
             
@@ -202,20 +202,20 @@
             applyCostViewProjectSelection();
         }
         
-        function clearCostViewFilter() {
+        async function clearCostViewFilter() {
             document.getElementById('costViewProjectFilter').value = '';
             document.getElementById('costViewProjectSelect').innerHTML = '';
-            updateCostViewProjectDropdown();
+            await updateCostViewProjectDropdown();
             // Auto-select all projects after clearing filter
             selectAllCostViewProjects();
         }
         
         
-        function generateCostViews() {
+        async function generateCostViews() {
             console.log('🔄 Generating cost views for selected projects...');
             
             // First filter the data based on selected projects
-            filterCostViewProjects();
+            await filterCostViewProjects();
             
             const noDataDiv = document.getElementById('costViewsNoData');
             
@@ -230,11 +230,11 @@
             noDataDiv.style.display = 'none';
         }
         
-        function filterCostViewProjects() {
+        async function filterCostViewProjects() {
             const projectSelect = document.getElementById('costViewProjectSelect');
             const selectedProjects = Array.from(projectSelect.selectedOptions).map(option => option.value);
             
-            const allCostData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            const allCostData = await loadCostDataFromStorage('i2e_cost_data_cache', []);
             
             if (selectedProjects.length === 0) {
                 costViewsFilteredData = [];
@@ -353,7 +353,7 @@
                                     ${projectName}
                                 </h4>
                                 <div style="font-size: 0.9rem; color: #6b7280;">
-                                    ${projectData.length} entries | €${projectData.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0).toLocaleString()}
+                                    ${projectData.length} entries | €${projectData.reduce((sum, item) => sum + parseExcelNumericValue(item.value), 0).toLocaleString()}
                                 </div>
                             </div>
                         </div>
@@ -375,7 +375,7 @@
             const monthlyData = {};
             projectData.forEach(item => {
                 const month = item.month || 'Unknown';
-                monthlyData[month] = (monthlyData[month] || 0) + (parseFloat(item.value) || 0);
+                monthlyData[month] = (monthlyData[month] || 0) + parseExcelNumericValue(item.value);
             });
             
             html += `
@@ -407,7 +407,7 @@
             const typeData = {};
             projectData.forEach(item => {
                 const type = item.type || item.source || 'Unknown';
-                typeData[type] = (typeData[type] || 0) + (parseFloat(item.value) || 0);
+                typeData[type] = (typeData[type] || 0) + parseExcelNumericValue(item.value);
             });
             
             html += `
@@ -666,8 +666,8 @@
                     employee = item.User || item.user || 'Unknown Employee';
                 }
                 
-                const cost = parseFloat(item['Cost €'] || item.value || 0);
-                const hours = parseFloat(item['Total'] || item.total || 0);
+                const cost = parseExcelNumericValue(item['Cost €'] || item.value || 0);
+                const hours = parseExcelNumericValue(item['Total'] || item.total || 0);
                 // Use different fields based on period selection
                 let dateStr = '';
                 if (period === 'Week') {
@@ -937,8 +937,8 @@
                     employee = item.User || item.user || 'Unknown Employee';
                 }
                 
-                const cost = parseFloat(item['Cost €'] || item.value || 0);
-                const hours = parseFloat(item['Total'] || item.total || 0);
+                const cost = parseExcelNumericValue(item['Cost €'] || item.value || 0);
+                const hours = parseExcelNumericValue(item['Total'] || item.total || 0);
                 // Use different fields based on period selection
                 let dateStr = '';
                 if (period === 'Week') {
@@ -1244,7 +1244,7 @@
             
             extSapData.forEach(item => {
                 const supplier = item['Name of offsetting account'] || item['CO object name'] || item.supplier || item['Name'] || item.name || 'Unknown Supplier';
-                const cost = parseFloat(item['Value'] || item.value || 0);
+                const cost = parseExcelNumericValue(item['Value'] || item.value || 0);
                 
                 // Use different fields based on period selection
                 let dateStr = '';
@@ -1427,7 +1427,7 @@
             extSapData.forEach(item => {
                 const project = item['CO object name'] || item.projectName || item['WBS Element'] || item.wbs || 'Unknown Project';
                 const supplier = item['Name of offsetting account'] || item['Name'] || item.supplier || item.name || 'Unknown Supplier';
-                const cost = parseFloat(item['Value'] || item.value || 0);
+                const cost = parseExcelNumericValue(item['Value'] || item.value || 0);
                 
                 // Use Period field for dates
                 let dateStr = item['Period'] || item.period || '';
@@ -1737,8 +1737,8 @@
             filteredData.forEach(item => {
                 const user = item.User || item.user || 'Unknown Employee';
                 const projectType = (item['Project Type'] || item.projectType || item['Type'] || item.type || 'Unknown Type').toUpperCase();
-                const cost = parseFloat(item['Cost €'] || item.value || 0);
-                const hours = parseFloat(item['Total'] || item.total || 0);
+                const cost = parseExcelNumericValue(item['Cost €'] || item.value || 0);
+                const hours = parseExcelNumericValue(item['Total'] || item.total || 0);
                 
                 // Determine if it's RTC or CTC based on project type
                 const isRTC = projectType.includes('RTC') || projectType.includes('RUNNING');
