@@ -1438,35 +1438,15 @@
                         }
                     }
                     
-                    // Process values
-                    const wbsValue = (wbsIndex >= 0 && !isBlankCell(row[wbsIndex])) ? row[wbsIndex].toString().trim() : '';
-                    const projectValue = (projectIndex >= 0 && !isBlankCell(row[projectIndex])) ? row[projectIndex].toString().trim() : '';
+                    // Process values using helper functions that handle external links
+                    const wbsValue = (wbsIndex >= 0 && !isBlankCell(row[wbsIndex])) ? parseExcelTextValue(row[wbsIndex]) : '';
+                    const projectValue = (projectIndex >= 0 && !isBlankCell(row[projectIndex])) ? parseExcelTextValue(row[projectIndex]) : '';
                     
-                    // Handle Excel formulas - get the calculated result, not the formula
-                    let costValue = 0;
-                    if (valueIndex >= 0 && row[valueIndex] !== null && row[valueIndex] !== undefined) {
-                        const rawCost = row[valueIndex];
-                        if (typeof rawCost === 'object' && rawCost.result !== undefined) {
-                            // ExcelJS formula object - use the calculated result
-                            costValue = parseFloat(rawCost.result) || 0;
-                        } else {
-                            // Regular value
-                            costValue = parseFloat(rawCost) || 0;
-                        }
-                    }
+                    // Handle Excel formulas and external links - get the calculated result
+                    const costValue = (valueIndex >= 0) ? parseExcelNumericValue(row[valueIndex]) : 0;
                     
                     // Get hours value to include external employees with zero cost but non-zero hours
-                    let hoursValue = 0;
-                    const totalField = item['Total'] || item.total;
-                    if (totalField !== null && totalField !== undefined) {
-                        if (typeof totalField === 'object' && totalField.result !== undefined) {
-                            // ExcelJS formula object - use the calculated result
-                            hoursValue = parseFloat(totalField.result) || 0;
-                        } else {
-                            // Regular value
-                            hoursValue = parseFloat(totalField) || 0;
-                        }
-                    }
+                    const hoursValue = parseExcelNumericValue(item['Total'] || item.total);
                     
                     // Accept rows with either WBS Element ID (CTC) or Project (RTC), plus non-zero cost OR hours
                     const hasValidProject = (wbsValue && wbsValue.toLowerCase() !== 'unknown' && wbsValue.toLowerCase() !== 'n/a') ||
@@ -1544,8 +1524,8 @@
                         }
                     }
                     
-                    // Only add if has essential fields
-                    const wbsValue = (wbsIndex >= 0 && row[wbsIndex]) ? row[wbsIndex].toString().trim() : '';
+                    // Only add if has essential fields - use helper functions for external link support
+                    const wbsValue = (wbsIndex >= 0 && row[wbsIndex]) ? parseExcelTextValue(row[wbsIndex]) : '';
                     const costValue = (valueIndex >= 0 && row[valueIndex]) ? parseExcelNumericValue(row[valueIndex]) : 0;
                     
                     // Debug first few rows

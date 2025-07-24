@@ -869,16 +869,30 @@
                 
                 const cost = parseExcelNumericValue(item['Cost €'] || item.value || 0);
                 const hours = parseExcelNumericValue(item['Total'] || item.total || 0);
-                // Use different fields based on period selection
-                let dateStr = '';
+                // Use PPM-specific field logic based on period selection
+                let periodKey = '';
                 if (period === 'Week') {
-                    dateStr = item['Week starts on'] || item.weekStartsOn || item.week || '';
+                    const dateStr = item['Week starts on'] || item.weekStartsOn || item.week || '';
+                    periodKey = parseI2EDate(dateStr, period);
                 } else {
-                    dateStr = item['Month of invoice'] || item.month || item['Month'] || item['Period'] || item.period || '';
+                    // For Month/Year: Use standardized field names (normalized during Excel parsing)
+                    const spp = item.serviceProvisionPeriod || item['Service provision period'] || '';
+                    const wso = item.weekStartsOn || item['Week starts on'] || '';
+                    
+                    if (spp && wso) {
+                        periodKey = calculatePPMPeriod(spp, wso, period);
+                    } else {
+                        // Fallback to old logic if fields missing
+                        const dateStr = item['Month of invoice'] || item.month || item['Month'] || item['Period'] || item.period || '';
+                        periodKey = parseI2EDate(dateStr, period);
+                    }
+                    
+                    // DEBUG: Log field availability for troubleshooting
+                    if (periodKey === 'Unknown') {
+                        console.log('🔍 PPM DEBUG (Project Employee View) - SPP:', spp, 'WSO:', wso);
+                        console.log('🔍 PPM DEBUG (Project Employee View) - Available fields:', Object.keys(item));
+                    }
                 }
-                
-                // Use centralized date parsing helper
-                const periodKey = parseI2EDate(dateStr, period);
                 allPeriods.add(periodKey);
                 
                 if (!projectData[project]) {
@@ -1429,7 +1443,7 @@
             const shortMonthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun',
                                    'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
             
-            // Convert wso to string using helper function that handles formulas
+            // Convert wso to string using helper function that handles formulas and external links
             let wsoStr = parseExcelTextValue(wso);
             
             // Handle Date objects and serial numbers specifically for dates
@@ -1442,11 +1456,11 @@
             }
             
             if (!wsoStr) {
-                console.warn('🔍 PPM: Could not parse WSO:', wso);
+                console.warn('🔍 PPM: Could not parse WSO (possible external link issue):', wso);
                 return 'Unknown';
             }
             
-            // Convert spp to string using helper function that handles formulas
+            // Convert spp to string using helper function that handles formulas and external links
             let sppStr = parseExcelTextValue(spp);
             
             // If SPP is still a Date after parsing, extract month name
@@ -1459,7 +1473,7 @@
             }
             
             if (!sppStr) {
-                console.warn('🔍 PPM: Could not parse SPP:', spp);
+                console.warn('🔍 PPM: Could not parse SPP (possible external link issue):', spp);
                 return 'Unknown';
             }
             
@@ -1497,13 +1511,15 @@
                 return 'Unknown';
             }
             
-            // Calculate year using business logic
+            // Calculate year using business logic: SPP can never be earlier than WSO
             let year = wsoDate.getFullYear();
+            const wsoMonth = wsoDate.getMonth(); // 0-11
             
-            // Special case for January: if WSO month is December, add 1 to year
-            if (monthIndex === 0 && wsoDate.getMonth() === 11) { // January SPP and December WSO
+            // If SPP month appears to be "before" WSO month, it must be next year
+            // Example: WSO = December 2024, SPP = January → SPP is actually January 2025
+            if (monthIndex < wsoMonth) {
                 year = year + 1;
-                console.log(`🔍 PPM: January SPP with December WSO - using year ${year}`);
+                console.log(`🔍 PPM: ${sppStr} SPP appears before ${wsoDate.getMonth() + 1} WSO - using year ${year}`);
             }
             
             // Return based on period type
@@ -1649,6 +1665,11 @@
                 else {
                     // Default classification logic - you may want to adjust this
                     type = projectType.includes('MAINTENANCE') || projectType.includes('SUPPORT') || projectType.includes('OPERATIONS') ? 'RTC' : 'CTC';
+                }
+                
+                // DEBUG: Log project type values and classifications
+                if (hours !== 0 && cost === 0) {
+                    console.log(`🔍 RTC/CTC DEBUG - Zero cost, non-zero hours: ProjectType="${projectType}", Classification="${type}", Hours=${hours}, User=${user}`);
                 }
                 
                 // Use standardized field names (normalized during Excel parsing)
