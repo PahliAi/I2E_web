@@ -1663,8 +1663,9 @@
                 if (isRTC) type = 'RTC';
                 else if (isCTC) type = 'CTC';
                 else {
-                    // Default classification logic - you may want to adjust this
-                    type = projectType.includes('MAINTENANCE') || projectType.includes('SUPPORT') || projectType.includes('OPERATIONS') ? 'RTC' : 'CTC';
+                    // Fallback for external link issues: use Project Name prefix
+                    const projectName = String(item['Project Name'] || item.projectName || '').toUpperCase();
+                    type = projectName.startsWith('RTC') ? 'RTC' : 'CTC';
                 }
                 
                 // DEBUG: Log project type values and classifications
