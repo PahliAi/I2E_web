@@ -93,7 +93,7 @@ function injectSpyIcon(containerId = null) {
 /**
  * Show the spy modal with current cache data
  */
-function showSpyModal() {
+async function showSpyModal() {
     // Create modal if it doesn't exist
     let modal = document.getElementById('spyModal');
     if (!modal) {
@@ -102,7 +102,7 @@ function showSpyModal() {
     }
     
     // Populate with fresh cache data
-    populateSpyModal();
+    await populateSpyModal();
     
     // Show modal
     modal.style.display = 'block';
@@ -148,27 +148,27 @@ function createSpyModal() {
                 
                 <!-- Tabs for different cache types -->
                 <div style="margin-bottom: 20px;">
-                    <button class="spy-tab-btn active" onclick="showSpyTab('summary')" 
+                    <button class="spy-tab-btn active" onclick="showSpyTab('summary', event)" 
                            style="background: #3b82f6; color: white; border: none; padding: 10px 20px; 
                                   margin-right: 10px; border-radius: 4px; cursor: pointer;">
                         📋 Summary
                     </button>
-                    <button class="spy-tab-btn" onclick="showSpyTab('pending')" 
+                    <button class="spy-tab-btn" onclick="showSpyTab('pending', event)" 
                            style="background: #6b7280; color: white; border: none; padding: 10px 20px; 
                                   margin-right: 10px; border-radius: 4px; cursor: pointer;">
                         ⏳ Pending
                     </button>
-                    <button class="spy-tab-btn" onclick="showSpyTab('approved')"
+                    <button class="spy-tab-btn" onclick="showSpyTab('approved', event)"
                            style="background: #6b7280; color: white; border: none; padding: 10px 20px; 
                                   margin-right: 10px; border-radius: 4px; cursor: pointer;">
                         ✅ Approved
                     </button>
-                    <button class="spy-tab-btn" onclick="showSpyTab('rejected')"
+                    <button class="spy-tab-btn" onclick="showSpyTab('rejected', event)"
                            style="background: #6b7280; color: white; border: none; padding: 10px 20px; 
                                   margin-right: 10px; border-radius: 4px; cursor: pointer;">
                         ❌ Rejected
                     </button>
-                    <button class="spy-tab-btn" onclick="showSpyTab('raw')"
+                    <button class="spy-tab-btn" onclick="showSpyTab('raw', event)"
                            style="background: #6b7280; color: white; border: none; padding: 10px 20px; 
                                   border-radius: 4px; cursor: pointer;">
                         🔧 Raw Data
@@ -203,7 +203,7 @@ function createSpyModal() {
 /**
  * Populate spy modal with current cache data
  */
-function populateSpyModal() {
+async function populateSpyModal() {
     try {
         console.log('🕵️ Spy modal: populateSpyModal called');
         
@@ -212,7 +212,7 @@ function populateSpyModal() {
             return;
         }
         
-        const cacheStats = getCacheStats();
+        const cacheStats = await getCacheStats();
         console.log('🕵️ Cache stats:', cacheStats);
         
         const statsElement = document.getElementById('spyStats');
@@ -249,7 +249,7 @@ function populateSpyModal() {
         updateClearCacheButton(cacheStats);
         
         // Show summary by default
-        showSpyTab('summary');
+        await showSpyTab('summary');
         
     } catch (error) {
         console.error('🕵️ Error populating spy modal:', error);
@@ -262,13 +262,13 @@ function populateSpyModal() {
 
 /**
  * Generate summary view of all invoices
- * @returns {Array} Array of invoice summaries
+ * @returns {Promise<Array>} Array of invoice summaries
  */
-function generateSummaryView() {
+async function generateSummaryView() {
     try {
-        const pending = getPendingInvoices() || [];
-        const approved = getApprovedInvoices() || [];
-        const rejected = getRejectedInvoices() || [];
+        const pending = await getPendingInvoices() || [];
+        const approved = await getApprovedInvoices() || [];
+        const rejected = await getRejectedInvoices() || [];
         
         const allInvoices = [...pending, ...approved, ...rejected];
         
@@ -307,17 +307,18 @@ function generateSummaryView() {
 /**
  * Show specific tab content in spy modal
  * @param {string} tabType - Type of tab to show (pending|approved|rejected|raw)
+ * @param {Event} clickEvent - Optional click event (when called from button click)
  */
-function showSpyTab(tabType) {
+async function showSpyTab(tabType, clickEvent = null) {
     try {
         console.log(`🕵️ Spy tab: switching to ${tabType}`);
         
         // Update tab button styles (only if called from a button click)
-        if (typeof event !== 'undefined' && event.target) {
+        if (clickEvent && clickEvent.target) {
             document.querySelectorAll('.spy-tab-btn').forEach(btn => {
                 btn.style.background = '#6b7280';
             });
-            event.target.style.background = '#3b82f6';
+            clickEvent.target.style.background = '#3b82f6';
         } else {
             // Called programmatically - find and update the right button
             const targetBtn = document.querySelector(`[onclick*="${tabType}"]`);
@@ -334,25 +335,25 @@ function showSpyTab(tabType) {
         
         switch(tabType) {
             case 'summary':
-                data = generateSummaryView();
+                data = await generateSummaryView();
                 break;
             case 'pending':
                 if (typeof getPendingInvoices === 'function') {
-                    data = getPendingInvoices();
+                    data = await getPendingInvoices();
                 } else {
                     data = { error: 'getPendingInvoices function not available' };
                 }
                 break;
             case 'approved':
                 if (typeof getApprovedInvoices === 'function') {
-                    data = getApprovedInvoices();
+                    data = await getApprovedInvoices();
                 } else {
                     data = { error: 'getApprovedInvoices function not available' };
                 }
                 break;
             case 'rejected':
                 if (typeof getRejectedInvoices === 'function') {
-                    data = getRejectedInvoices();
+                    data = await getRejectedInvoices();
                 } else {
                     data = { error: 'getRejectedInvoices function not available' };
                 }
@@ -602,7 +603,7 @@ function formatDate(dateString) {
  * @param {string} invoiceNumber - Invoice number to update
  * @param {string} newDate - New date in dd.mm.yyyy format
  */
-function updateInvoiceDate(invoiceNumber, newDate) {
+async function updateInvoiceDate(invoiceNumber, newDate) {
     try {
         console.log(`🕵️ Updating invoice ${invoiceNumber} date to: ${newDate}`);
         
@@ -614,7 +615,7 @@ function updateInvoiceDate(invoiceNumber, newDate) {
         }
         
         // Get pending invoices
-        const pendingInvoices = getPendingInvoices();
+        const pendingInvoices = await getPendingInvoices();
         const invoiceIndex = pendingInvoices.findIndex(inv => inv.invoiceNumber === invoiceNumber);
         
         if (invoiceIndex === -1) {
@@ -651,11 +652,11 @@ function updateInvoiceDate(invoiceNumber, newDate) {
             console.log(`✅ Invoice ${invoiceNumber} date updated successfully`);
             
             // Refresh the spy modal display
-            showSpyTab('pending');
+            await showSpyTab('pending');
             
             // If we're in the validator, refresh the pending invoices table too
             if (typeof displayPendingInvoices === 'function' && typeof getPendingInvoices === 'function') {
-                displayPendingInvoices(getPendingInvoices());
+                displayPendingInvoices(await getPendingInvoices());
             }
             
         } else {
@@ -747,9 +748,9 @@ async function exportSpyData() {
         }
         
         // Collect all cache data
-        const pendingInvoices = getPendingInvoices() || [];
-        const approvedInvoices = getApprovedInvoices() || [];
-        const rejectedInvoices = getRejectedInvoices() || [];
+        const pendingInvoices = await getPendingInvoices() || [];
+        const approvedInvoices = await getApprovedInvoices() || [];
+        const rejectedInvoices = await getRejectedInvoices() || [];
         
         console.log('🕵️ Export Debug - Pending invoices:', pendingInvoices.length);
         console.log('🕵️ Export Debug - Approved invoices:', approvedInvoices.length);
@@ -931,7 +932,7 @@ async function exportSpyData() {
         logInfo(`🕵️ Cache data exported to Excel from ${appName}`);
         
         // Offer to clear cache if storage is >80% full
-        const stats = getCacheStats();
+        const stats = await getCacheStats();
         const percentUsed = parseFloat(stats.limits?.percentUsed || 0);
         
         if (percentUsed > 80) {

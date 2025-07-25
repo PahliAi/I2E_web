@@ -25,14 +25,14 @@ const MAX_CACHE_SIZE = 5 * 1024 * 1024; // 5MB limit for safety
  * @param {Object} invoiceData - Complete extracted invoice data
  * @returns {boolean} Success status
  */
-function addPendingInvoice(invoiceData) {
+async function addPendingInvoice(invoiceData) {
     try {
         if (!invoiceData || !invoiceData.invoiceNumber) {
             logError('addPendingInvoice: Invalid invoice data', invoiceData);
             return false;
         }
 
-        const pendingInvoices = getPendingInvoices();
+        const pendingInvoices = await getPendingInvoices();
         
         // Check for duplicates
         const existingIndex = pendingInvoices.findIndex(invoice => 
@@ -90,7 +90,7 @@ function addPendingInvoice(invoiceData) {
             logInfo(`Added new pending invoice: ${invoiceData.invoiceNumber}`);
         }
 
-        return saveToLocalStorage(CACHE_KEYS.PENDING, pendingInvoices);
+        return await saveToIndexedDB(CACHE_KEYS.PENDING, pendingInvoices);
 
     } catch (error) {
         logError('Error adding pending invoice:', error);
@@ -102,9 +102,9 @@ function addPendingInvoice(invoiceData) {
  * Get all pending invoices from cache
  * @returns {Array} Array of pending invoice objects
  */
-function getPendingInvoices() {
+async function getPendingInvoices() {
     try {
-        const pending = loadFromLocalStorage(CACHE_KEYS.PENDING, []);
+        const pending = await loadFromIndexedDB(CACHE_KEYS.PENDING, []);
         
         // Mark cache items as from cache (not new)
         return pending.map(invoice => ({
@@ -125,9 +125,9 @@ function getPendingInvoices() {
  * @param {string} comments - Optional approval comments
  * @returns {boolean} Success status
  */
-function approveInvoice(invoiceNumber, userId = 'unknown', comments = '') {
+async function approveInvoice(invoiceNumber, userId = 'unknown', comments = '') {
     try {
-        const pendingInvoices = getPendingInvoices();
+        const pendingInvoices = await getPendingInvoices();
         const invoiceIndex = pendingInvoices.findIndex(inv => inv.invoiceNumber === invoiceNumber);
         
         if (invoiceIndex === -1) {
@@ -137,9 +137,9 @@ function approveInvoice(invoiceNumber, userId = 'unknown', comments = '') {
 
         const invoice = pendingInvoices[invoiceIndex];
         
-        // Create approved summary (no full data to save space)
-        const approvedSummary = {
-            invoiceNumber: invoice.invoiceNumber,
+        // Create approved invoice (keep full data since we have IndexedDB storage)
+        const approvedInvoice = {
+            ...invoice,
             status: 'approved',
             approvalDate: new Date().toISOString(),
             approvedBy: userId,
@@ -152,12 +152,12 @@ function approveInvoice(invoiceNumber, userId = 'unknown', comments = '') {
         pendingInvoices.splice(invoiceIndex, 1);
         
         // Add to approved
-        const approvedInvoices = getApprovedInvoices();
-        approvedInvoices.push(approvedSummary);
+        const approvedInvoices = await getApprovedInvoices();
+        approvedInvoices.push(approvedInvoice);
 
         // Save both arrays
-        const pendingSaved = saveToLocalStorage(CACHE_KEYS.PENDING, pendingInvoices);
-        const approvedSaved = saveToLocalStorage(CACHE_KEYS.APPROVED, approvedInvoices);
+        const pendingSaved = await saveToIndexedDB(CACHE_KEYS.PENDING, pendingInvoices);
+        const approvedSaved = await saveToIndexedDB(CACHE_KEYS.APPROVED, approvedInvoices);
 
         if (pendingSaved && approvedSaved) {
             logInfo(`Invoice approved: ${invoiceNumber} by ${userId}`);
@@ -180,9 +180,9 @@ function approveInvoice(invoiceNumber, userId = 'unknown', comments = '') {
  * @param {string} comments - Rejection reason (recommended)
  * @returns {boolean} Success status
  */
-function rejectInvoice(invoiceNumber, userId = 'unknown', comments = '') {
+async function rejectInvoice(invoiceNumber, userId = 'unknown', comments = '') {
     try {
-        const pendingInvoices = getPendingInvoices();
+        const pendingInvoices = await getPendingInvoices();
         const invoiceIndex = pendingInvoices.findIndex(inv => inv.invoiceNumber === invoiceNumber);
         
         if (invoiceIndex === -1) {
@@ -192,9 +192,9 @@ function rejectInvoice(invoiceNumber, userId = 'unknown', comments = '') {
 
         const invoice = pendingInvoices[invoiceIndex];
         
-        // Create rejected summary
-        const rejectedSummary = {
-            invoiceNumber: invoice.invoiceNumber,
+        // Create rejected invoice (keep full data since we have IndexedDB storage)
+        const rejectedInvoice = {
+            ...invoice,
             status: 'rejected',
             rejectionDate: new Date().toISOString(),
             rejectedBy: userId,
@@ -207,12 +207,12 @@ function rejectInvoice(invoiceNumber, userId = 'unknown', comments = '') {
         pendingInvoices.splice(invoiceIndex, 1);
         
         // Add to rejected
-        const rejectedInvoices = getRejectedInvoices();
-        rejectedInvoices.push(rejectedSummary);
+        const rejectedInvoices = await getRejectedInvoices();
+        rejectedInvoices.push(rejectedInvoice);
 
         // Save both arrays
-        const pendingSaved = saveToLocalStorage(CACHE_KEYS.PENDING, pendingInvoices);
-        const rejectedSaved = saveToLocalStorage(CACHE_KEYS.REJECTED, rejectedInvoices);
+        const pendingSaved = await saveToIndexedDB(CACHE_KEYS.PENDING, pendingInvoices);
+        const rejectedSaved = await saveToIndexedDB(CACHE_KEYS.REJECTED, rejectedInvoices);
 
         if (pendingSaved && rejectedSaved) {
             logInfo(`Invoice rejected: ${invoiceNumber} by ${userId}`);
@@ -232,9 +232,9 @@ function rejectInvoice(invoiceNumber, userId = 'unknown', comments = '') {
  * Get all approved invoices from cache
  * @returns {Array} Array of approved invoice summaries
  */
-function getApprovedInvoices() {
+async function getApprovedInvoices() {
     try {
-        return loadFromLocalStorage(CACHE_KEYS.APPROVED, []);
+        return await loadFromIndexedDB(CACHE_KEYS.APPROVED, []);
     } catch (error) {
         logError('Error getting approved invoices:', error);
         return [];
@@ -245,9 +245,9 @@ function getApprovedInvoices() {
  * Get all rejected invoices from cache
  * @returns {Array} Array of rejected invoice summaries
  */
-function getRejectedInvoices() {
+async function getRejectedInvoices() {
     try {
-        return loadFromLocalStorage(CACHE_KEYS.REJECTED, []);
+        return await loadFromIndexedDB(CACHE_KEYS.REJECTED, []);
     } catch (error) {
         logError('Error getting rejected invoices:', error);
         return [];
@@ -260,11 +260,11 @@ function getRejectedInvoices() {
  * Get all invoices regardless of status
  * @returns {Array} Combined array of all invoices
  */
-function getAllInvoices() {
+async function getAllInvoices() {
     try {
-        const pending = getPendingInvoices();
-        const approved = getApprovedInvoices();
-        const rejected = getRejectedInvoices();
+        const pending = await getPendingInvoices();
+        const approved = await getApprovedInvoices();
+        const rejected = await getRejectedInvoices();
         
         return [...pending, ...approved, ...rejected];
         
@@ -276,12 +276,12 @@ function getAllInvoices() {
 
 /**
  * Get invoices for validation calculations (exclude rejected)
- * @returns {Array} Pending + approved invoices only
+ * @returns {Promise<Array>} Pending + approved invoices only
  */
-function getInvoicesForValidation() {
+async function getInvoicesForValidation() {
     try {
-        const pending = getPendingInvoices();
-        const approved = getApprovedInvoices();
+        const pending = await getPendingInvoices();
+        const approved = await getApprovedInvoices();
         
         return [...pending, ...approved];
         
@@ -463,19 +463,15 @@ function aggregateByWBS(invoices) {
  */
 async function clearCache() {
     try {
-        // Clear localStorage invoice data
+        // Clear IndexedDB invoice data
+        await removeFromIndexedDB(CACHE_KEYS.PENDING);
+        await removeFromIndexedDB(CACHE_KEYS.APPROVED);
+        await removeFromIndexedDB(CACHE_KEYS.REJECTED);
+        
+        // Also clear any legacy localStorage invoice data 
         localStorage.removeItem(CACHE_KEYS.PENDING);
         localStorage.removeItem(CACHE_KEYS.APPROVED);
         localStorage.removeItem(CACHE_KEYS.REJECTED);
-        
-        // Also clear any IndexedDB invoice data if it exists
-        try {
-            await removeFromIndexedDB(CACHE_KEYS.PENDING);
-            await removeFromIndexedDB(CACHE_KEYS.APPROVED);
-            await removeFromIndexedDB(CACHE_KEYS.REJECTED);
-        } catch (indexedDBError) {
-            console.warn('IndexedDB clearing failed (may not exist):', indexedDBError);
-        }
         
         logInfo('Cache cleared successfully (localStorage + IndexedDB)');
         return true;
@@ -488,25 +484,30 @@ async function clearCache() {
 
 /**
  * Get cache statistics
- * @returns {Object} Cache size and count information
+ * @returns {Promise<Object>} Cache size and count information
  */
-function getCacheStats() {
+async function getCacheStats() {
     try {
-        const pending = getPendingInvoices();
-        const approved = getApprovedInvoices();
-        const rejected = getRejectedInvoices();
+        const pending = await getPendingInvoices() || [];
+        const approved = await getApprovedInvoices() || [];
+        const rejected = await getRejectedInvoices() || [];
         
-        const pendingSize = JSON.stringify(pending).length;
-        const approvedSize = JSON.stringify(approved).length;
-        const rejectedSize = JSON.stringify(rejected).length;
+        // Ensure all values are arrays
+        const safePending = Array.isArray(pending) ? pending : [];
+        const safeApproved = Array.isArray(approved) ? approved : [];
+        const safeRejected = Array.isArray(rejected) ? rejected : [];
+        
+        const pendingSize = JSON.stringify(safePending).length;
+        const approvedSize = JSON.stringify(safeApproved).length;
+        const rejectedSize = JSON.stringify(safeRejected).length;
         const totalSize = pendingSize + approvedSize + rejectedSize;
         
         return {
             counts: {
-                pending: pending.length,
-                approved: approved.length,
-                rejected: rejected.length,
-                total: pending.length + approved.length + rejected.length
+                pending: safePending.length,
+                approved: safeApproved.length,
+                rejected: safeRejected.length,
+                total: safePending.length + safeApproved.length + safeRejected.length
             },
             sizes: {
                 pending: pendingSize,
@@ -537,9 +538,9 @@ function getCacheStats() {
  * Export all cache data to Excel format
  * @returns {Array} Flattened array suitable for Excel export
  */
-function exportCacheToExcel() {
+async function exportCacheToExcel() {
     try {
-        const allInvoices = getAllInvoices();
+        const allInvoices = await getAllInvoices();
         const exportData = [];
         
         allInvoices.forEach(invoice => {
@@ -599,6 +600,7 @@ function extractInvoiceSummary(fullInvoiceData) {
         projectId: firstItem.projectId,
         customerId: firstItem.customerId,
         fileName: firstItem.fileName,
+        invoiceNumber: firstItem.invoiceNumber,
         invoiceDate: firstItem.dateOfInvoice,
         monthOfInvoice: firstItem.monthOfInvoice,
         currency: firstItem.currency,

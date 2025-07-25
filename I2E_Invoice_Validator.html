@@ -377,11 +377,11 @@
             }
         }
 
-        function updateDataSourceStatus() {
+        async function updateDataSourceStatus() {
             // File info displays removed - data now uploaded in index screen
             
             // Check if we're ready to process after updating the UI
-            checkReadyToProcess();
+            await checkReadyToProcess();
         }
 
 
@@ -396,9 +396,9 @@
             console.log('  - i2e_cost_data_cache:', localStorage.getItem('i2e_cost_data_cache'));
             
             console.log('Parsed cache data:');
-            const pendingInvoices = getPendingInvoices();
-            const approvedInvoices = getApprovedInvoices();
-            const rejectedInvoices = getRejectedInvoices();
+            const pendingInvoices = await getPendingInvoices();
+            const approvedInvoices = await getApprovedInvoices();
+            const rejectedInvoices = await getRejectedInvoices();
             const costDataCache = await loadFromIndexedDB('i2e_cost_data_cache', []);
             
             console.log('  - Pending invoices:', pendingInvoices);
@@ -408,7 +408,7 @@
             
             console.log('Cache stats:');
             try {
-                const cacheStats = getCacheStats();
+                const cacheStats = await getCacheStats();
                 console.log('  - Cache stats:', cacheStats);
             } catch (error) {
                 console.log('  - Cache stats error:', error);
@@ -430,14 +430,14 @@
             // Try to load data from session storage first
             const hasSessionData = await loadDataFromSession();
             
-            initializeValidator();
+            await initializeValidator();
             
             if (hasSessionData) {
                 // Update UI to show loaded data
-                updateDataSourceStatus();
+                await updateDataSourceStatus();
                 
                 // Reload pending invoices if we have cost data
-                const pendingInvoices = getPendingInvoices();
+                const pendingInvoices = await getPendingInvoices();
                 if (pendingInvoices && pendingInvoices.length > 0) {
                     displayPendingInvoices(pendingInvoices);
                     console.log(`🔄 Restored ${pendingInvoices.length} pending invoices from cache`);
@@ -472,14 +472,14 @@
             }, 500);
         });
 
-        function initializeValidator() {
+        async function initializeValidator() {
             console.log('🔍 Initializing I2E Invoice Validator...');
             
             // Inject spy icon into header
             injectSpyIcon();
             
             // Load cached invoices immediately
-            loadCachedInvoices();
+            await loadCachedInvoices();
             
             // File upload handlers removed - data now uploaded in index screen
             
@@ -498,12 +498,12 @@
         }
 
         // ===== CACHE MANAGEMENT =====
-        function loadCachedInvoices() {
+        async function loadCachedInvoices() {
             try {
                 console.log('📋 Loading cached invoices...');
                 
-                const pendingInvoices = getPendingInvoices();
-                const cacheStats = getCacheStats();
+                const pendingInvoices = await getPendingInvoices();
+                const cacheStats = await getCacheStats();
                 
                 console.log('🔍 Raw pendingInvoices from getPendingInvoices():', pendingInvoices);
                 console.log('🔍 Cache stats:', cacheStats);
@@ -964,8 +964,8 @@
          * @param {string} monthOfInvoice - Month of invoice
          * @returns {Array} Array of other invoice numbers for same project/month
          */
-        function checkForMultipleInvoicesInMonth(currentInvoiceNumber, projectId, monthOfInvoice) {
-            const pendingInvoices = getPendingInvoices();
+        async function checkForMultipleInvoicesInMonth(currentInvoiceNumber, projectId, monthOfInvoice) {
+            const pendingInvoices = await getPendingInvoices();
             const sameProjectMonth = [];
             
             pendingInvoices.forEach(invoice => {
@@ -999,7 +999,7 @@
         }
 
         // ===== APPROVAL WORKFLOW =====
-        function handleApproveInvoice(invoiceNumber) {
+        async function handleApproveInvoice(invoiceNumber) {
             const comments = prompt(`Approve invoice ${invoiceNumber}?\n\nOptional comments:`);
             
             if (comments !== null) { // User didn't cancel
@@ -1011,14 +1011,14 @@
                         throw new Error('approveInvoice function not available - cache module may not be loaded');
                     }
                     
-                    const result = window.approveInvoice(invoiceNumber, userId, comments);
+                    const result = await await window.approveInvoice(invoiceNumber, userId, comments);
                     console.log(`🔄 Approval result: ${result}`);
                     
                     if (result === true) {
                         console.log(`✅ Invoice approved: ${invoiceNumber}`);
                         
                         // Refresh display
-                        loadCachedInvoices();
+                        await loadCachedInvoices();
                         
                         // Show success message
                         showNotification(`Invoice ${invoiceNumber} approved successfully`, 'success');
@@ -1035,7 +1035,7 @@
             }
         }
 
-        function handleRejectInvoice(invoiceNumber) {
+        async function handleRejectInvoice(invoiceNumber) {
             const comments = prompt(`Reject invoice ${invoiceNumber}?\n\nReason for rejection (required):`);
             
             if (comments !== null && comments.trim() !== '') {
@@ -1047,14 +1047,14 @@
                         throw new Error('rejectInvoice function not available - cache module may not be loaded');
                     }
                     
-                    const result = window.rejectInvoice(invoiceNumber, userId, comments);
+                    const result = await window.rejectInvoice(invoiceNumber, userId, comments);
                     console.log(`🔄 Rejection result: ${result}`);
                     
                     if (result === true) {
                         console.log(`❌ Invoice rejected: ${invoiceNumber}`);
                         
                         // Refresh display
-                        loadCachedInvoices();
+                        await loadCachedInvoices();
                         
                         // Show success message
                         showNotification(`Invoice ${invoiceNumber} rejected`, 'warning');
@@ -1073,7 +1073,7 @@
             }
         }
 
-        function showInvoiceDetails(invoiceNumber) {
+        async function showInvoiceDetails(invoiceNumber) {
             // Store selected invoice for details tab
             validationData.selectedInvoiceNumber = invoiceNumber;
             
@@ -1084,7 +1084,7 @@
             switchTab('details');
             
             // Load invoice details
-            loadInvoiceDetails(invoiceNumber);
+            await loadInvoiceDetails(invoiceNumber);
         }
 
         // ===== BULK OPERATIONS =====
@@ -1115,7 +1115,7 @@
             updateSelectedInvoices();
         }
 
-        function bulkApproveInvoices() {
+        async function bulkApproveInvoices() {
             if (validationData.selectedInvoices.length === 0) {
                 alert('No invoices selected.');
                 return;
@@ -1127,16 +1127,16 @@
                 const userId = getUserId();
                 let successCount = 0;
                 
-                validationData.selectedInvoices.forEach(invoiceNumber => {
-                    if (window.approveInvoice(invoiceNumber, userId, comments)) {
+                for (const invoiceNumber of validationData.selectedInvoices) {
+                    if (await window.approveInvoice(invoiceNumber, userId, comments)) {
                         successCount++;
                     }
-                });
+                }
                 
                 console.log(`✅ Bulk approved: ${successCount}/${validationData.selectedInvoices.length} invoices`);
                 
                 // Refresh display
-                loadCachedInvoices();
+                await loadCachedInvoices();
                 
                 // Clear selections
                 validationData.selectedInvoices = [];
@@ -1148,7 +1148,7 @@
             }
         }
 
-        function bulkRejectInvoices() {
+        async function bulkRejectInvoices() {
             if (validationData.selectedInvoices.length === 0) {
                 alert('No invoices selected.');
                 return;
@@ -1160,20 +1160,21 @@
                 const userId = getUserId();
                 let successCount = 0;
                 
-                validationData.selectedInvoices.forEach((invoiceNumber, index) => {
+                for (let index = 0; index < validationData.selectedInvoices.length; index++) {
+                    const invoiceNumber = validationData.selectedInvoices[index];
                     console.log(`❌ Rejecting invoice ${index + 1}/${validationData.selectedInvoices.length}: ${invoiceNumber}`);
-                    if (window.rejectInvoice(invoiceNumber, userId, comments)) {
+                    if (await window.rejectInvoice(invoiceNumber, userId, comments)) {
                         successCount++;
                         console.log(`✅ Successfully rejected: ${invoiceNumber}`);
                     } else {
                         console.error(`❌ Failed to reject: ${invoiceNumber}`);
                     }
-                });
+                }
                 
                 console.log(`❌ Bulk rejected: ${successCount}/${validationData.selectedInvoices.length} invoices`);
                 
                 // Refresh display
-                loadCachedInvoices();
+                await loadCachedInvoices();
                 
                 // Clear selections
                 validationData.selectedInvoices = [];
@@ -1246,7 +1247,7 @@
 
 
 
-        function checkReadyToProcess() {
+        async function checkReadyToProcess() {
             const hasData = validationData.ppmData || validationData.extSapData || validationData.i2eData;
             const processBtn = document.getElementById('processBtn');
             
@@ -1254,7 +1255,7 @@
             if (!processBtn) return;
             
             // Enable button if we have uploaded data OR cached invoices
-            const cacheStats = getCacheStats();
+            const cacheStats = await getCacheStats();
             const hasCachedInvoices = cacheStats.counts.pending > 0 || cacheStats.counts.approved > 0;
             
             processBtn.disabled = !(hasData || hasCachedInvoices);
@@ -1332,7 +1333,7 @@
                 displayValidationResults(results);
                 
                 // Refresh Pending Invoices table now that cost data is loaded
-                const pendingInvoices = getPendingInvoices();
+                const pendingInvoices = await getPendingInvoices();
                 displayPendingInvoices(pendingInvoices);
                 console.log('🔄 Refreshed Pending Invoices table with cost data');
                 
@@ -1726,7 +1727,7 @@
             console.log(`🎯 Auto-selected ${visibleProjects.length} projects and top invoice`);
         }
 
-        function filterProjects() {
+        async function filterProjects() {
             const projectFilter = document.getElementById('projectFilter').value.toLowerCase();
             const pendingInvoicesFilter = document.getElementById('pendingInvoicesFilter').checked;
             const tableBody = document.getElementById('validationTableBody');
@@ -1742,7 +1743,7 @@
             // Get pending invoices to check which projects have pending invoices
             let projectsWithPendingInvoices = new Set();
             if (pendingInvoicesFilter) {
-                const pendingInvoices = getPendingInvoices();
+                const pendingInvoices = await getPendingInvoices();
                 pendingInvoices.forEach(invoice => {
                     const projectId = getProjectId(invoice);
                     if (projectId) {
@@ -1882,14 +1883,14 @@
 
         // ===== INVOICE DETAILS FUNCTIONALITY =====
         
-        function loadInvoiceDetails(invoiceNumber) {
+        async function loadInvoiceDetails(invoiceNumber) {
             console.log(`🔍 Loading details for invoice: ${invoiceNumber}`);
             
             const detailsContent = document.getElementById('detailsContent');
             const detailsPlaceholder = document.getElementById('detailsPlaceholder');
             
             // Find the invoice in pending invoices
-            const pendingInvoices = getPendingInvoices();
+            const pendingInvoices = await getPendingInvoices();
             console.log('🔍 All pending invoices:', pendingInvoices);
             const invoice = pendingInvoices.find(inv => inv.invoiceNumber === invoiceNumber);
             console.log('🔍 Found invoice for details:', invoice);
@@ -2630,7 +2631,7 @@
         }
 
         // Modify the existing filterProjects function to handle pending invoices filter
-        function filterProjects() {
+        async function filterProjects() {
             const projectFilter = document.getElementById('projectFilter').value.toLowerCase();
             const pendingInvoicesFilter = document.getElementById('pendingInvoicesFilter').checked;
             
@@ -2639,7 +2640,7 @@
             // Get pending invoices to check which projects have pending invoices
             let projectsWithPendingInvoices = new Set();
             if (pendingInvoicesFilter) {
-                const pendingInvoices = getPendingInvoices();
+                const pendingInvoices = await getPendingInvoices();
                 pendingInvoices.forEach(invoice => {
                     const invoiceData = invoice.fullInvoiceData && invoice.fullInvoiceData[0] ? invoice.fullInvoiceData[0] : {};
                     const projectId = invoiceData.projectId;
@@ -2758,9 +2759,9 @@
             console.log('  - i2e_rejected_invoices:', localStorage.getItem('i2e_rejected_invoices'));
             
             console.log('Parsed cache data:');
-            const pendingInvoices = getPendingInvoices();
-            const approvedInvoices = getApprovedInvoices();
-            const rejectedInvoices = getRejectedInvoices();
+            const pendingInvoices = await getPendingInvoices();
+            const approvedInvoices = await getApprovedInvoices();
+            const rejectedInvoices = await getRejectedInvoices();
             
             console.log('  - Pending invoices:', pendingInvoices);
             console.log('  - Approved invoices:', approvedInvoices);
@@ -2768,7 +2769,7 @@
             
             console.log('Cache stats:');
             try {
-                const cacheStats = getCacheStats();
+                const cacheStats = await getCacheStats();
                 console.log('  - Cache stats:', cacheStats);
             } catch (error) {
                 console.log('  - Cache stats error:', error);
@@ -2783,9 +2784,9 @@
         
         // ===== CACHE EXPORT FUNCTION =====
         
-        function exportCacheData() {
+        async function exportCacheData() {
             try {
-                const exportData = exportCacheToExcel();
+                const exportData = await exportCacheToExcel();
                 if (exportData.length === 0) {
                     alert('No cache data to export.');
                     return;
@@ -2825,10 +2826,10 @@
         
         // ===== NO PENDING INVOICES MODAL =====
         
-        function checkAndShowExportReminder() {
-            const pendingInvoices = getPendingInvoices();
-            const approvedInvoices = getApprovedInvoices();
-            const rejectedInvoices = getRejectedInvoices();
+        async function checkAndShowExportReminder() {
+            const pendingInvoices = await getPendingInvoices();
+            const approvedInvoices = await getApprovedInvoices();
+            const rejectedInvoices = await getRejectedInvoices();
             
             // Show reminder if no pending invoices but have approved/rejected invoices
             if (pendingInvoices.length === 0 && (approvedInvoices.length > 0 || rejectedInvoices.length > 0)) {

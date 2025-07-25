@@ -242,7 +242,7 @@
             initializeApp();
         });
         
-        function initializeApp() {
+        async function initializeApp() {
             // Check URL parameters
             const urlParams = new URLSearchParams(window.location.search);
             const hideUpload = urlParams.get('hideUpload') === 'true';
@@ -250,7 +250,7 @@
             // Always initialize normally first
             setupFileUpload();
             setupEventListeners();
-            displayCacheStatus();
+            await displayCacheStatus();
             
             if (hideUpload) {
                 console.log('🔍 hideUpload mode activated - hiding upload after normal init');
@@ -270,15 +270,19 @@
                     if (h1) h1.textContent = 'Invoice 2 Excel';
                     if (p) {
                         // Check if there's cache info to preserve
-                        const cacheStats = getCacheStats();
-                        if (cacheStats.counts.total > 0) {
-                            p.innerHTML = `
-                                Review extracted invoice data and export to Excel<br>
-                                <span style="color: #059669; font-weight: 500;">📋 ${cacheStats.counts.total} invoices in cache (${cacheStats.counts.pending} pending validation)</span>
-                            `;
-                        } else {
+                        getCacheStats().then(cacheStats => {
+                            if (cacheStats.counts.total > 0) {
+                                p.innerHTML = `
+                                    Review extracted invoice data and export to Excel<br>
+                                    <span style="color: #059669; font-weight: 500;">📋 ${cacheStats.counts.total} invoices in cache (${cacheStats.counts.pending} pending validation)</span>
+                                `;
+                            } else {
+                                p.textContent = 'Review extracted invoice data and export to Excel';
+                            }
+                        }).catch(error => {
+                            console.error('Error getting cache stats for header:', error);
                             p.textContent = 'Review extracted invoice data and export to Excel';
-                        }
+                        });
                     }
                     
                     console.log('✅ hideUpload mode setup complete');
@@ -287,117 +291,57 @@
                 // Back to dashboard button removed - users can use home button instead
                 
                 // Load and display cached invoice data
-                loadCachedInvoiceData();
+                await loadCachedInvoiceData();
             }
             
             // Check for cached data in both modes
             console.log('🔍 Checking for cached data...');
             
-            try {
-                const pendingInvoices = getPendingInvoices() || [];
-                const approvedInvoices = getApprovedInvoices() || [];
-                const rejectedInvoices = getRejectedInvoices() || [];
-                
-                console.log('🔍 Raw cache function results:');
-                console.log('  - pendingInvoices:', pendingInvoices, 'length:', pendingInvoices.length);
-                console.log('  - approvedInvoices:', approvedInvoices, 'length:', approvedInvoices.length);
-                console.log('  - rejectedInvoices:', rejectedInvoices, 'length:', rejectedInvoices.length);
-                
-                const totalCached = pendingInvoices.length + approvedInvoices.length + rejectedInvoices.length;
-                
-                console.log('📊 Found cached invoices:', totalCached);
-                console.log('🔍 Condition check: totalCached > 0 =', totalCached > 0);
-                
-                if (totalCached > 0) {
-                    console.log('✅ Auto-showing cached data');
-                
-                // Show data review section
-                const dataReviewCard = document.getElementById('dataReviewCard');
-                if (dataReviewCard) {
-                    dataReviewCard.style.display = 'block';
-                    console.log('✅ Data review card shown');
-                    console.log('🔍 DataReviewCard position:', {
-                        offsetTop: dataReviewCard.offsetTop,
-                        offsetLeft: dataReviewCard.offsetLeft,
-                        scrollTop: window.pageYOffset,
-                        windowHeight: window.innerHeight
-                    });
-                }
-                
-                // Load and display the cached data
-                loadCachedInvoiceData();
-                
-                // Simulate processing completion to show the data table
-                setTimeout(() => {
-                    console.log('🔍 Simulating processing completion...');
-                    
-                    // Find the data review card and ensure it's visible
-                    const dataReviewCard = document.getElementById('dataReviewCard');
-                    if (dataReviewCard) {
-                        dataReviewCard.style.display = 'block';
-                        console.log('✅ Data review card made visible');
-                        
-                        // Check if data table is properly populated
-                        if (window.extractedData && window.extractedData.length > 0) {
-                            console.log('🔍 Found extractedData with', window.extractedData.length, 'items');
-                            
-                            // Check if table body has proper content
-                            const tableBody = document.getElementById('dataTableBody');
-                            if (tableBody && tableBody.innerHTML.length > 100) {
-                                console.log('✅ Table body has substantial content:', tableBody.innerHTML.length, 'characters');
-                            } else {
-                                console.log('⚠️ Table body has minimal content, calling updateDataReview again...');
-                                updateDataReview();
-                            }
-                        } else {
-                            console.log('❌ No extractedData found for table display');
-                        }
-                    }
-                }, 200);
-                } else {
-                    console.log('❌ No cached data found, showing upload area only');
-                }
-            } catch (error) {
-                console.error('❌ Error checking cached data:', error);
-            }
+            // Use async function to check cached data
+            checkCachedDataAsync();
             
             console.log('🚀 I2E Invoice Processor initialized successfully!');
         }
         
-        function loadCachedInvoiceData() {
+        async function loadCachedInvoiceData() {
             console.log('🔍 loadCachedInvoiceData called');
             
-            // Load invoice data from cache
-            const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
-            const approvedInvoices = loadFromLocalStorage('i2e_approved_invoices', []);
-            const rejectedInvoices = loadFromLocalStorage('i2e_rejected_invoices', []);
-            
-            console.log('📊 Cache data loaded:');
-            console.log('  - Pending invoices:', pendingInvoices.length);
-            console.log('  - Approved invoices:', approvedInvoices.length);
-            console.log('  - Rejected invoices:', rejectedInvoices.length);
-            
-            // Combine all invoices
-            const allInvoices = [...pendingInvoices, ...approvedInvoices, ...rejectedInvoices];
-            
-            console.log('📊 Total invoices combined:', allInvoices.length);
-            
-            if (allInvoices.length === 0) {
-                console.log('❌ No invoice data found in cache');
-                document.getElementById('dataReviewCard').innerHTML = `
-                    <div style="text-align: center; padding: 2rem; color: #6b7280;">
-                        <div style="font-size: 3rem; margin-bottom: 1rem;">📄</div>
-                        <h4>No Invoice Data Found</h4>
-                        <p>Please upload invoices from the dashboard first.</p>
-                        <button class="btn btn-primary" onclick="window.location.href = 'index.html'">Go to Dashboard</button>
-                    </div>
-                `;
-                return;
+            try {
+                // Load invoice data from cache using async functions
+                const pendingInvoices = await getPendingInvoices() || [];
+                const approvedInvoices = await getApprovedInvoices() || [];
+                const rejectedInvoices = await getRejectedInvoices() || [];
+                
+                console.log('📊 Cache data loaded:');
+                console.log('  - Pending invoices:', pendingInvoices.length);
+                console.log('  - Approved invoices:', approvedInvoices.length);
+                console.log('  - Rejected invoices:', rejectedInvoices.length);
+                
+                // Combine all invoices
+                const allInvoices = [...pendingInvoices, ...approvedInvoices, ...rejectedInvoices];
+                
+                console.log('📊 Total invoices combined:', allInvoices.length);
+                
+                if (allInvoices.length === 0) {
+                    console.log('❌ No invoice data found in cache');
+                    document.getElementById('dataReviewCard').innerHTML = `
+                        <div style="text-align: center; padding: 2rem; color: #6b7280;">
+                            <div style="font-size: 3rem; margin-bottom: 1rem;">📄</div>
+                            <h4>No Invoice Data Found</h4>
+                            <p>Please upload invoices from the dashboard first.</p>
+                            <button class="btn btn-primary" onclick="window.location.href = 'index.html'">Go to Dashboard</button>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                console.log('✅ Found invoice data, calling displayInvoiceData...');
+                // Display invoice data
+                displayInvoiceData(allInvoices);
+            } catch (error) {
+                console.error('❌ Error loading cached invoice data:', error);
+                showNoDataMessage();
             }
-            
-            console.log('✅ Found invoice data, calling displayInvoiceData...');
-            // Display invoice data
-            displayInvoiceData(allInvoices);
         }
         
         function displayInvoiceData(invoices) {
@@ -448,10 +392,10 @@
             console.log('✅ displayInvoiceData completed - UI should now show data');
         }
         
-        function displayCacheStatus() {
+        async function displayCacheStatus() {
             try {
                 console.log('🔍 displayCacheStatus() called');
-                const cacheStats = getCacheStats();
+                const cacheStats = await getCacheStats();
                 console.log('📊 Cache Status:', cacheStats);
                 console.log('📊 Total count:', cacheStats.counts.total);
                 
@@ -666,7 +610,7 @@
                         console.log('💾 Using corrected amounts for cache storage:', Object.keys(invoiceGroups).length, 'invoices');
                         
                         // Add each unique invoice to pending cache
-                        Object.values(invoiceGroups).forEach(invoiceData => {
+                        for (const invoiceData of Object.values(invoiceGroups)) {
                             // invoiceData is an array of line items
                             // Use the first item as the main invoice data structure
                             const mainInvoiceData = { ...invoiceData[0] };
@@ -680,11 +624,11 @@
                                 fullInvoiceData: invoiceData // Complete array for processing
                             };
                             
-                            if (addPendingInvoice(invoiceEntry)) {
+                            if (await addPendingInvoice(invoiceEntry)) {
                                 addedCount++;
                                 console.log('📝 Added to pending cache:', invoiceData[0].invoiceNumber);
                             }
-                        });
+                        }
                         
                         console.log(`✅ Cache update completed: ${addedCount} invoices added to pending validation`);
                         
@@ -710,10 +654,10 @@
                 updateProcessButton();
                 
                 // Refresh cache status display
-                displayCacheStatus();
+                await displayCacheStatus();
                 
                 // Show user feedback about cache
-                const cacheStats = getCacheStats();
+                const cacheStats = await getCacheStats();
                 if (cacheStats.counts.pending > 0) {
                     console.log(`✅ Processing complete! ${cacheStats.counts.pending} invoices are now pending validation.`);
                 }
@@ -1893,9 +1837,9 @@
                
         // ===== CACHE MANAGEMENT FUNCTIONS =====
         
-        function exportCacheData() {
+        async function exportCacheData() {
             try {
-                const exportData = exportCacheToExcel();
+                const exportData = await exportCacheToExcel();
                 if (exportData.length === 0) {
                     alert('No cache data to export.');
                     return;
@@ -1912,8 +1856,8 @@
             }
         }
         
-        function clearCacheData() {
-            const cacheStats = getCacheStats();
+        async function clearCacheData() {
+            const cacheStats = await getCacheStats();
             
             if (cacheStats.counts.total === 0) {
                 alert('Cache is already empty.');
@@ -1930,8 +1874,8 @@
             );
             
             if (confirmed) {
-                if (clearCache()) {
-                    displayCacheStatus();
+                if (await clearCache()) {
+                    await displayCacheStatus();
                     console.log('🗑️ Cache cleared successfully');
                     alert('Cache cleared successfully.');
                 } else {
@@ -1959,29 +1903,74 @@
         
         // ===== CACHED DATA LOADING =====
         
-        function loadCachedInvoiceData() {
-            console.log('🔍 loadCachedInvoiceData called');
-            
-            // Get all cached invoice data
-            const pendingInvoices = getPendingInvoices() || [];
-            const approvedInvoices = getApprovedInvoices() || [];
-            const rejectedInvoices = getRejectedInvoices() || [];
-            
-            // Combine all invoices
-            const allInvoices = [...pendingInvoices, ...approvedInvoices, ...rejectedInvoices];
-            
-            console.log('📊 Cache data loaded:');
-            console.log(`  - Pending invoices: ${pendingInvoices.length}`);
-            console.log(`  - Approved invoices: ${approvedInvoices.length}`);
-            console.log(`  - Rejected invoices: ${rejectedInvoices.length}`);
-            console.log(`📊 Total invoices combined: ${allInvoices.length}`);
-            
-            if (allInvoices.length > 0) {
-                console.log('✅ Found invoice data, calling displayInvoiceData...');
-                displayInvoiceData(allInvoices);
-            } else {
-                console.log('⚠️ No cached invoice data found');
-                showNoDataMessage();
+        // Add async function to check cached data
+        async function checkCachedDataAsync() {
+            try {
+                const pendingInvoices = await getPendingInvoices() || [];
+                const approvedInvoices = await getApprovedInvoices() || [];
+                const rejectedInvoices = await getRejectedInvoices() || [];
+                
+                console.log('🔍 Raw cache function results:');
+                console.log('  - pendingInvoices:', pendingInvoices, 'length:', pendingInvoices.length);
+                console.log('  - approvedInvoices:', approvedInvoices, 'length:', approvedInvoices.length);
+                console.log('  - rejectedInvoices:', rejectedInvoices, 'length:', rejectedInvoices.length);
+                
+                const totalCached = pendingInvoices.length + approvedInvoices.length + rejectedInvoices.length;
+                
+                console.log('📊 Found cached invoices:', totalCached);
+                console.log('🔍 Condition check: totalCached > 0 =', totalCached > 0);
+                
+                if (totalCached > 0) {
+                    console.log('✅ Auto-showing cached data');
+                
+                    // Show data review section
+                    const dataReviewCard = document.getElementById('dataReviewCard');
+                    if (dataReviewCard) {
+                        dataReviewCard.style.display = 'block';
+                        console.log('✅ Data review card shown');
+                        console.log('🔍 DataReviewCard position:', {
+                            offsetTop: dataReviewCard.offsetTop,
+                            offsetLeft: dataReviewCard.offsetLeft,
+                            scrollTop: window.pageYOffset,
+                            windowHeight: window.innerHeight
+                        });
+                    }
+                    
+                    // Load and display the cached data
+                    await loadCachedInvoiceData();
+                    
+                    // Simulate processing completion to show the data table
+                    setTimeout(() => {
+                        console.log('🔍 Simulating processing completion...');
+                        
+                        // Find the data review card and ensure it's visible
+                        const dataReviewCard = document.getElementById('dataReviewCard');
+                        if (dataReviewCard) {
+                            dataReviewCard.style.display = 'block';
+                            console.log('✅ Data review card made visible');
+                            
+                            // Check if data table is properly populated
+                            if (window.extractedData && window.extractedData.length > 0) {
+                                console.log('🔍 Found extractedData with', window.extractedData.length, 'items');
+                                
+                                // Check if table body has proper content
+                                const tableBody = document.getElementById('dataTableBody');
+                                if (tableBody && tableBody.innerHTML.length > 100) {
+                                    console.log('✅ Table body has substantial content:', tableBody.innerHTML.length, 'characters');
+                                } else {
+                                    console.log('⚠️ Table body has minimal content, calling updateDataReview again...');
+                                    updateDataReview();
+                                }
+                            } else {
+                                console.log('❌ No extractedData found for table display');
+                            }
+                        }
+                    }, 200);
+                } else {
+                    console.log('❌ No cached data found, showing upload area only');
+                }
+            } catch (error) {
+                console.error('❌ Error checking cached data:', error);
             }
         }
         
@@ -2006,25 +1995,29 @@
         
         // ===== DEBUG FUNCTIONS =====
         
-        function debugCacheData() {
+        async function debugCacheData() {
             console.log('🔍 Debug Cache Data:');
             console.log('Raw localStorage data:');
             console.log('  - i2e_pending_invoices:', localStorage.getItem('i2e_pending_invoices'));
             console.log('  - i2e_approved_invoices:', localStorage.getItem('i2e_approved_invoices'));
             console.log('  - i2e_rejected_invoices:', localStorage.getItem('i2e_rejected_invoices'));
             
-            console.log('Parsed cache data:');
-            const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
-            const approvedInvoices = loadFromLocalStorage('i2e_approved_invoices', []);
-            const rejectedInvoices = loadFromLocalStorage('i2e_rejected_invoices', []);
-            
-            console.log('  - Pending invoices:', pendingInvoices);
-            console.log('  - Approved invoices:', approvedInvoices);
-            console.log('  - Rejected invoices:', rejectedInvoices);
+            console.log('Parsed cache data (async):');
+            try {
+                const pendingInvoices = await getPendingInvoices();
+                const approvedInvoices = await getApprovedInvoices();
+                const rejectedInvoices = await getRejectedInvoices();
+                
+                console.log('  - Pending invoices:', pendingInvoices);
+                console.log('  - Approved invoices:', approvedInvoices);
+                console.log('  - Rejected invoices:', rejectedInvoices);
+            } catch (error) {
+                console.error('  - Error loading cache data:', error);
+            }
             
             console.log('Cache stats:');
             try {
-                const cacheStats = getCacheStats();
+                const cacheStats = await getCacheStats();
                 console.log('  - Cache stats:', cacheStats);
             } catch (error) {
                 console.log('  - Cache stats error:', error);
@@ -2035,9 +2028,9 @@
         window.debugCacheData = debugCacheData;
         
         // ===== APP-SPECIFIC SPY FUNCTIONS =====
-        function refreshAfterCacheClear() {
+        async function refreshAfterCacheClear() {
             // Update cache status display after clearing
-            displayCacheStatus();
+            await displayCacheStatus();
         }
         
         // ===== INITIALIZATION =====

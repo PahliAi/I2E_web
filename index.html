@@ -954,17 +954,18 @@
                 }
             });
             
-            // Update invoice data display
-            const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
-            if (pendingInvoices.length > 0 && invoiceCachedData) {
-                invoiceCachedData.innerHTML = `
-                    <h5>📄 Cached Invoice Data</h5>
-                    <p>${pendingInvoices.length} pending invoice${pendingInvoices.length !== 1 ? 's' : ''}</p>
-                `;
-                invoiceCachedData.style.display = 'block';
-            } else if (invoiceCachedData) {
-                invoiceCachedData.style.display = 'none';
-            }
+            // Update invoice data display (async)
+            loadFromIndexedDB('i2e_pending_invoices', []).then(pendingInvoices => {
+                if (pendingInvoices.length > 0 && invoiceCachedData) {
+                    invoiceCachedData.innerHTML = `
+                        <h5>📄 Cached Invoice Data</h5>
+                        <p>${pendingInvoices.length} pending invoice${pendingInvoices.length !== 1 ? 's' : ''}</p>
+                    `;
+                    invoiceCachedData.style.display = 'block';
+                } else if (invoiceCachedData) {
+                    invoiceCachedData.style.display = 'none';
+                }
+            });
         }
         
         async function updateContinueButton() {
@@ -976,7 +977,7 @@
             }
             
             const costData = await loadCostDataFromStorage('i2e_cost_data_cache', []);
-            const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
+            const pendingInvoices = await loadFromIndexedDB('i2e_pending_invoices', []);
             const hasUploadedCost = selectedFiles.cost.length > 0;
             const hasUploadedInvoices = selectedFiles.invoice.length > 0;
             
@@ -1014,19 +1015,19 @@
             }
         }
         
-        function checkForAnyData() {
+        async function checkForAnyData() {
             // Check for cached cost data and invoice data
-            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
-            const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
-            const approvedInvoices = loadFromLocalStorage('i2e_approved_invoices', []);
-            const rejectedInvoices = loadFromLocalStorage('i2e_rejected_invoices', []);
+            const costData = await loadCostDataFromStorage('i2e_cost_data_cache', []);
+            const pendingInvoices = await loadFromIndexedDB('i2e_pending_invoices', []);
+            const approvedInvoices = await loadFromIndexedDB('i2e_approved_invoices', []);
+            const rejectedInvoices = await loadFromIndexedDB('i2e_rejected_invoices', []);
             
             return costData.length > 0 || pendingInvoices.length > 0 || 
                    approvedInvoices.length > 0 || rejectedInvoices.length > 0;
         }
         
-        function updateCacheOverview() {
-            const hasData = checkForAnyData();
+        async function updateCacheOverview() {
+            const hasData = await checkForAnyData();
             const cacheOverview = document.getElementById('cacheOverview');
             const noDataMessage = document.getElementById('noDataMessage');
             
@@ -1116,13 +1117,13 @@
             costDataStats.innerHTML = html;
         }
         
-        function updateInvoiceStats() {
+        async function updateInvoiceStats() {
             const invoiceStats = document.getElementById('invoiceStats');
             if (!invoiceStats) return; // Element doesn't exist in new layout
             
-            const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
-            const approvedInvoices = loadFromLocalStorage('i2e_approved_invoices', []);
-            const rejectedInvoices = loadFromLocalStorage('i2e_rejected_invoices', []);
+            const pendingInvoices = await loadFromIndexedDB('i2e_pending_invoices', []);
+            const approvedInvoices = await loadFromIndexedDB('i2e_approved_invoices', []);
+            const rejectedInvoices = await loadFromIndexedDB('i2e_rejected_invoices', []);
             
             const html = `
                 <div class="stat-item pending"><span>Pending</span><span>${pendingInvoices.length}</span></div>
@@ -1133,7 +1134,7 @@
             invoiceStats.innerHTML = html;
         }
         
-        function updateNavigationButtons() {
+        async function updateNavigationButtons() {
             // These navigation buttons don't exist in the new card-based layout
             // This function is legacy from the old layout, so we'll just return early
             const costAnalysisButton = document.getElementById('costAnalysisButton');
@@ -1144,10 +1145,10 @@
                 return;
             }
             
-            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
-            const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
-            const approvedInvoices = loadFromLocalStorage('i2e_approved_invoices', []);
-            const rejectedInvoices = loadFromLocalStorage('i2e_rejected_invoices', []);
+            const costData = await loadCostDataFromStorage('i2e_cost_data_cache', []);
+            const pendingInvoices = await loadFromIndexedDB('i2e_pending_invoices', []);
+            const approvedInvoices = await loadFromIndexedDB('i2e_approved_invoices', []);
+            const rejectedInvoices = await loadFromIndexedDB('i2e_rejected_invoices', []);
             
             const hasCostData = costData.length > 0;
             const hasInvoiceData = pendingInvoices.length > 0 || approvedInvoices.length > 0 || rejectedInvoices.length > 0;
@@ -1198,14 +1199,14 @@
             addFilesToSelection(files, type);
         }
         
-        function addFilesToSelection(files, type) {
+        async function addFilesToSelection(files, type) {
             const validExtensions = type === 'cost' ? ['.xlsx', '.xls'] : ['.pdf'];
             
-            files.forEach(file => {
+            for (const file of files) {
                 const extension = '.' + file.name.split('.').pop().toLowerCase();
                 if (!validExtensions.includes(extension)) {
                     alert(`Invalid file type: ${file.name}. Expected: ${validExtensions.join(', ')}`);
-                    return;
+                    continue;
                 }
                 
                 // Check for duplicate file names
@@ -1215,20 +1216,20 @@
                 
                 if (isDuplicate) {
                     alert(`File "${file.name}" is already selected. Duplicate files are not allowed.`);
-                    return;
+                    continue;
                 }
                 
                 // Check if file with same name already exists in cache
-                if (isFileAlreadyInCache(file.name, type)) {
+                if (await isFileAlreadyInCache(file.name, type)) {
                     const confirmReplace = confirm(`File "${file.name}" already exists in cache. Do you want to replace it?`);
                     if (!confirmReplace) {
-                        return;
+                        continue;
                     }
                     // If they confirm, we'll process it and it will overwrite in cache
                 }
                 
                 selectedFiles[type].push(file);
-            });
+            }
             
             updateFileList(type);
             processFiles(type);
@@ -1690,7 +1691,7 @@
                             });
                             
                             // Add each unique invoice to pending cache
-                            Object.values(invoiceGroups).forEach(invoiceData => {
+                            for (const invoiceData of Object.values(invoiceGroups)) {
                                 // Apply credit note correction before storing
                                 const correctedInvoiceData = correctCreditNoteAmounts(invoiceData);
                                 
@@ -1707,11 +1708,11 @@
                                     fullInvoiceData: correctedInvoiceData // Complete array with corrections
                                 };
                                 
-                                if (addPendingInvoice(invoiceEntry)) {
+                                if (await addPendingInvoice(invoiceEntry)) {
                                     totalAdded++;
                                     console.log('📝 Added to pending cache:', correctedInvoiceData[0].invoiceNumber);
                                 }
-                            });
+                            }
                             
                             totalProcessed++;
                         } else {
@@ -1890,7 +1891,7 @@
                 console.log('🎬 Starting demo data load...');
                 
                 // Check if demo data already exists
-                if (isDemoDataAlreadyLoaded()) {
+                if (await isDemoDataAlreadyLoaded()) {
                     updateDemoCardVisibility();
                     return;
                 }
@@ -1961,14 +1962,14 @@
             }
         }
         
-        function isDemoDataAlreadyLoaded() {
+        async function isDemoDataAlreadyLoaded() {
             // Check if demo mode flag exists
             const demoModeFlag = localStorage.getItem('i2e_demo_mode');
             if (!demoModeFlag) return false;
             
             // Check if demo files are in cache
-            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
-            const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
+            const costData = await loadCostDataFromStorage('i2e_cost_data_cache', []);
+            const pendingInvoices = await loadFromIndexedDB('i2e_pending_invoices', []);
             
             // Look for demo file indicators in the data
             const hasDemoExcel = costData.some(item => 
@@ -1987,13 +1988,13 @@
             return hasDemoExcel || hasDemoInvoices;
         }
         
-        function updateDemoCardVisibility() {
+        async function updateDemoCardVisibility() {
             const demoCard = document.getElementById('demoCard');
             const workflowCardsContainer = document.querySelector('.main-content');
             
             // Check cache state
-            const hasUserData = hasNonDemoData();
-            const hasDemoData = hasDemoDataOnly();
+            const hasUserData = await hasNonDemoData();
+            const hasDemoData = await hasDemoDataOnly();
             
             if (hasUserData) {
                 // Hide demo card and redistribute other 3 cards evenly
@@ -2024,17 +2025,17 @@
             }
         }
         
-        function hasNonDemoData() {
+        async function hasNonDemoData() {
             // Check for non-demo cost data
-            const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
+            const costData = await loadCostDataFromStorage('i2e_cost_data_cache', []);
             const hasNonDemoCostData = costData.some(item => 
                 !item.sourceFile || !item.sourceFile.includes('DEMO_INT_EXT_25.xlsx')
             );
             
             // Check for non-demo invoice data
-            const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
-            const approvedInvoices = loadFromLocalStorage('i2e_approved_invoices', []);
-            const rejectedInvoices = loadFromLocalStorage('i2e_rejected_invoices', []);
+            const pendingInvoices = await loadFromIndexedDB('i2e_pending_invoices', []);
+            const approvedInvoices = await loadFromIndexedDB('i2e_approved_invoices', []);
+            const rejectedInvoices = await loadFromIndexedDB('i2e_rejected_invoices', []);
             
             const hasNonDemoInvoices = [...pendingInvoices, ...approvedInvoices, ...rejectedInvoices].some(invoice => {
                 // Check if invoice has fullInvoiceData (pending invoices)
@@ -2065,14 +2066,14 @@
             return hasNonDemoCostData || hasNonDemoInvoices;
         }
         
-        function hasDemoDataOnly() {
+        async function hasDemoDataOnly() {
             // Check if demo mode flag exists
             const demoModeFlag = localStorage.getItem('i2e_demo_mode');
             if (!demoModeFlag) return false;
             
             // Check if we have demo data but no user data
-            const hasDemoData = isDemoDataAlreadyLoaded();
-            const hasUserData = hasNonDemoData();
+            const hasDemoData = await isDemoDataAlreadyLoaded();
+            const hasUserData = await hasNonDemoData();
             
             return hasDemoData && !hasUserData;
         }
@@ -2090,7 +2091,7 @@
             demoCard.setAttribute('onclick', '');
         }
         
-        function clearDemoData(event) {
+        async function clearDemoData(event) {
             try {
                 // Prevent event propagation
                 if (event) {
@@ -2101,10 +2102,16 @@
                 // Remove demo mode flag
                 localStorage.removeItem('i2e_demo_mode');
                 
-                // Clear ALL Excel/cost data cache (like clearExcelCacheWithConfirm)
-                localStorage.removeItem('i2e_cost_data_cache');
+                // Clear ALL Excel/cost data cache (from IndexedDB)
+                await removeFromIndexedDB('i2e_cost_data_cache');
                 
-                // Clear ALL invoice cache (like clearCacheWithConfirm)
+                // Clear ALL invoice cache (from IndexedDB) 
+                await removeFromIndexedDB('i2e_pending_invoices');
+                await removeFromIndexedDB('i2e_approved_invoices');
+                await removeFromIndexedDB('i2e_rejected_invoices');
+                
+                // Also clear any legacy localStorage data
+                localStorage.removeItem('i2e_cost_data_cache');
                 localStorage.removeItem('i2e_pending_invoices');
                 localStorage.removeItem('i2e_approved_invoices');
                 localStorage.removeItem('i2e_rejected_invoices');
@@ -2146,14 +2153,14 @@
             demoCard.setAttribute('onclick', 'selectWorkflow(\'demo\')');
         }
         
-        function isFileAlreadyInCache(fileName, type) {
+        async function isFileAlreadyInCache(fileName, type) {
             if (type === 'cost') {
                 // Check cost data cache for this file
-                const costData = loadFromLocalStorage('i2e_cost_data_cache', []);
+                const costData = await loadCostDataFromStorage('i2e_cost_data_cache', []);
                 return costData.some(item => item.sourceFile === fileName);
             } else if (type === 'invoice') {
                 // Check pending invoices for this file
-                const pendingInvoices = loadFromLocalStorage('i2e_pending_invoices', []);
+                const pendingInvoices = await loadFromIndexedDB('i2e_pending_invoices', []);
                 return pendingInvoices.some(invoice => 
                     invoice.fullInvoiceData && invoice.fullInvoiceData.some(item => 
                         item.fileName === fileName

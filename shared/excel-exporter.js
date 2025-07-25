@@ -704,7 +704,7 @@ async function createIndividualInvoiceDetailSheets(workbook, data) {
         });
 
         // Get detailed invoice data from cache to include cost comparison
-        const allInvoices = typeof getAllInvoices === 'function' ? getAllInvoices() : [];
+        const allInvoices = typeof getAllInvoices === 'function' ? await getAllInvoices() : [];
         
         // Create a sheet for each invoice
         for (const [invoiceNumber, invoiceInfo] of invoiceMap) {
