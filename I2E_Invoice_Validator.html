@@ -16,6 +16,42 @@
     
     <!-- Shared Styles -->
     <link rel="stylesheet" href="assets/i2e-styles.css">
+    <style>
+        /* Let pending tab size naturally based on table content */
+        #pendingTab {
+            width: fit-content !important;
+            max-width: none !important;
+            margin: 0 auto !important;
+            padding: 0 20px !important;
+        }
+        
+        /* Let table size naturally based on content */
+        #pendingInvoicesTable {
+            width: auto !important;
+            table-layout: auto !important;
+            margin: 0 auto !important;
+        }
+        
+        /* Compact cell padding */
+        #pendingInvoicesTable td,
+        #pendingInvoicesTable th {
+            padding: 4px 8px !important;
+            white-space: nowrap !important;
+        }
+        
+        /* Override container max-width for natural sizing */
+        body:has(#pendingTab.active) .container {
+            max-width: none !important;
+            width: fit-content !important;
+            margin: 0 auto !important;
+        }
+        
+        /* Make sure the card also sizes naturally */
+        #pendingTab .card {
+            width: fit-content !important;
+            margin: 0 auto !important;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -111,11 +147,11 @@
                 </div>
                 
                 <!-- Tab 2: Pending Invoices -->
-                <div id="pendingTab" class="tab-content active">
+                <div id="pendingTab" class="tab-content active" style="max-width: none; width: 100vw; margin: 0 -20px; padding: 0 20px;">
                     <div class="card">
                         
                         <!-- Project Filter Bar (hidden by default) -->
-                        <div id="projectFilterBar" class="info-bar" style="display: none; margin-bottom: 1rem; padding: 1rem; background: #fff7ed; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                        <div id="projectFilterBar" class="info-bar" style="display: none; margin-bottom: 1rem; padding: 1rem; background: #fff7ed; border-radius: 8px; border-left: 4px solid #3b82f6;">
                             <div style="display: flex; align-items: center; justify-content: space-between;">
                                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                                     <span style="font-size: 1.2rem;">🎯</span>
@@ -131,18 +167,29 @@
                         
                         <!-- Pending Invoices Table -->
                         <div style="overflow-x: auto;">
-                            <table class="data-table" id="pendingInvoicesTable" style="min-width: 1000px;">
+                            <table class="data-table" id="pendingInvoicesTable" style="width: auto; font-size: 0.8rem; table-layout: auto;">
                                 <thead>
-                                    <tr>
-                                        <th><input type="checkbox" id="selectAllPending" onchange="toggleSelectAllPending()"></th>
-                                        <th onclick="sortPendingTable(1)" style="cursor: pointer;">Invoice #</th>
-                                        <th onclick="sortPendingTable(2)" style="cursor: pointer;">Project</th>
-                                        <th onclick="sortPendingTable(3)" style="cursor: pointer;">Amount</th>
-                                        <th onclick="sortPendingTable(4)" style="cursor: pointer;">Internal Cost</th>
-                                        <th onclick="sortPendingTable(5)" style="cursor: pointer;">External Cost</th>
-                                        <th onclick="sortPendingTable(6)" style="cursor: pointer;">Total Cost</th>
-                                        <th onclick="sortPendingTable(7)" style="cursor: pointer;">Delta</th>
-                                        <th style="min-width: 140px;">Actions</th>
+                                    <!-- Top header row with merged cells -->
+                                    <tr style="font-size: 0.75rem; background-color: #f8fafc; border-bottom: 2px solid #e5e7eb;">
+                                        <th rowspan="2" style="vertical-align: middle; padding: 4px;"><input type="checkbox" id="selectAllPending" onchange="toggleSelectAllPending()"></th>
+                                        <th rowspan="2" onclick="sortPendingTable(1)" style="cursor: pointer; vertical-align: middle; padding: 4px;">Invoice #</th>
+                                        <th rowspan="2" onclick="sortPendingTable(2)" style="cursor: pointer; vertical-align: middle; padding: 4px;">Project</th>
+                                        <th colspan="4" style="text-align: center; background-color: #f0f9ff; border: 2px solid #3b82f6; font-weight: bold; padding: 4px;">Internal Costs</th>
+                                        <th colspan="2" style="text-align: center; background-color: #f0f9ff; border: 2px solid #3b82f6; font-weight: bold; padding: 4px;">External Costs</th>
+                                        <th colspan="2" style="text-align: center; background-color: #f0f9ff; border: 2px solid #3b82f6; font-weight: bold; padding: 4px;">Total Costs</th>
+                                        <th rowspan="2" onclick="sortPendingTable(12)" style="cursor: pointer; vertical-align: middle; padding: 4px;">Delta</th>
+                                        <th rowspan="2" style="vertical-align: middle; padding: 4px;">Actions</th>
+                                    </tr>
+                                    <!-- Bottom header row with individual column names -->
+                                    <tr style="font-size: 0.75rem;">
+                                        <th style="background-color: #f0f9ff; padding: 4px;">Invoice<br>hrs</th>
+                                        <th style="background-color: #f0f9ff; padding: 4px;">PPM<br>hrs</th>
+                                        <th style="background-color: #f0f9ff; padding: 4px;">Invoice<br>cost</th>
+                                        <th style="background-color: #f0f9ff; padding: 4px;">PPM<br>cost</th>
+                                        <th style="background-color: #f0f9ff; padding: 4px;">Invoice<br>ext cost</th>
+                                        <th style="background-color: #f0f9ff; padding: 4px;">SAP<br>ext cost</th>
+                                        <th style="background-color: #f0f9ff; padding: 4px;">Invoice<br>total</th>
+                                        <th style="background-color: #f0f9ff; padding: 4px;">PPM/SAP<br>total</th>
                                     </tr>
                                 </thead>
                                 <tbody id="pendingInvoicesTableBody">
@@ -547,7 +594,7 @@
                 console.log('❌ No pending invoices to display');
                 tableBody.innerHTML = `
                     <tr>
-                        <td colspan="11" style="text-align: center; padding: 2rem; color: #6b7280;">
+                        <td colspan="13" style="text-align: center; padding: 2rem; color: #6b7280;">
                             <div style="font-size: 1.2rem; margin-bottom: 0.5rem;">📭</div>
                             <div>No pending invoices found</div>
                             <div style="font-size: 0.9rem; margin-top: 0.5rem;">
@@ -574,16 +621,13 @@
                                           invoice.fullInvoiceData[0].creditNote && 
                                           invoice.fullInvoiceData[0].isCreditNoteCorrected;
                 
-                // Calculate costs for this invoice based on month filtering
-                const costs = calculateInvoiceCosts(invoice, monthOfInvoice);
-                
-                // Calculate delta (difference between invoice amount and total costs)
-                const delta = invoiceTotal - costs.totalCost;
-                const isDeltaZero = Math.abs(delta) < 0.01; // Consider amounts within 1 cent as zero
+                // Calculate detailed invoice data including hours
+                const detailedData = calculateDetailedInvoiceData(invoice, monthOfInvoice);
+                const isDeltaZero = Math.abs(detailedData.delta) < 0.01; // Consider amounts within 1 cent as zero
                 
                 // Determine row styling (green for zero delta overrides credit note blue)
                 const rowStyle = isDeltaZero ? 
-                    'style="background: #f0fdf4; border-left: 4px solid #10b981;"' : 
+                    'style="background: #f0fdf4; border-left: 4px solid #3b82f6;"' : 
                     (isCorrectCreditNote ? 'style="background: #f0f9ff; border-left: 4px solid #0ea5e9;"' : '');
                 
                 return `
@@ -591,13 +635,20 @@
                         <td>
                             <input type="checkbox" class="invoice-checkbox" value="${invoiceNumber}" onchange="updateSelectedInvoices()">
                         </td>
-                        <td><strong>${invoiceNumber}</strong>${isCorrectCreditNote && !isDeltaZero ? ' <span style="color: #0ea5e9; font-size: 0.8rem;">📝 Credit Note</span>' : ''}${isDeltaZero ? ' <span style="color: #10b981; font-size: 0.8rem;">✓ Match</span>' : ''}</td>
+                        <td><strong>${invoiceNumber}</strong>${isCorrectCreditNote && !isDeltaZero ? ' <span style="color: #0ea5e9; font-size: 0.8rem;">📝 Credit Note</span>' : ''}${isDeltaZero ? ' <span style="color: #3b82f6; font-size: 0.8rem;">✓ Match</span>' : ''}</td>
                         <td>${projectId}</td>
-                        <td>${formatCurrency(invoiceTotal)}</td>
-                        <td>${formatCurrency(costs.internalCost)}</td>
-                        <td>${formatCurrency(costs.externalCost)}</td>
-                        <td><strong>${formatCurrency(costs.totalCost)}</strong></td>
-                        <td style="color: ${Math.abs(delta) < 0.01 ? '#059669' : (delta < 0 ? '#dc2626' : 'inherit')}; font-weight: bold;">${formatCurrency(delta)}</td>
+                        <!-- Internal Costs: Invoice hrs, PPM hrs, Invoice cost, PPM cost -->
+                        <td style="background-color: #fefdf4;">${detailedData.invoiceInternalHours.toFixed(0)}</td>
+                        <td style="background-color: #fefdf4;">${detailedData.ppmInternalHours.toFixed(0)}</td>
+                        <td style="background-color: #fefdf4;">${formatCurrencyNoDecimals(detailedData.invoiceInternalCost)}</td>
+                        <td style="background-color: #fefdf4;">${formatCurrencyNoDecimals(detailedData.ppmInternalCost)}</td>
+                        <!-- External Costs: Invoice ext cost, SAP ext cost -->
+                        <td style="background-color: #fef2f2;">${formatCurrencyNoDecimals(detailedData.invoiceExternalCost)}</td>
+                        <td style="background-color: #fef2f2;">${formatCurrencyNoDecimals(detailedData.sapExternalCost)}</td>
+                        <!-- Total Costs: Invoice total, PPM/SAP total -->
+                        <td style="background-color: #f0fdf4;"><strong>${formatCurrencyNoDecimals(detailedData.invoiceTotalCost)}</strong></td>
+                        <td style="background-color: #f0fdf4;"><strong>${formatCurrencyNoDecimals(detailedData.ppmSapTotalCost)}</strong></td>
+                        <td style="color: ${Math.abs(detailedData.delta) < 0.01 ? '#059669' : (detailedData.delta < 0 ? '#dc2626' : 'inherit')}; font-weight: bold;">${formatCurrencyNoDecimals(detailedData.delta)}</td>
                         <td>
                             <div style="display: flex; gap: 0.5rem;">
                                 <button class="btn btn-success" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="handleApproveInvoice('${invoiceNumber}')">Approve</button>
@@ -1494,6 +1545,13 @@
             return wbsCode.toString().replace(/-EXN$/, '').trim().toUpperCase();
         }
 
+        function getMonthNumber(monthName) {
+            const months = ['January', 'February', 'March', 'April', 'May', 'June',
+                          'July', 'August', 'September', 'October', 'November', 'December'];
+            const index = months.findIndex(month => month.toLowerCase() === monthName.toLowerCase());
+            return index >= 0 ? index + 1 : null;
+        }
+
         // ===== RESULTS DISPLAY =====
         function displayValidationResults(results) {
             const container = document.getElementById('validationResults');
@@ -1506,9 +1564,9 @@
                 
                 // Color coding based on delta and cost availability
                 if (item.internalCost === 0 && item.externalCost === 0) {
-                    row.style.backgroundColor = '#fef3c7'; // Yellow for no costs found
+                    row.style.backgroundColor = '#f0f9ff'; // Yellow for no costs found
                 } else if (Math.abs(item.delta) < 0.01) {
-                    row.style.backgroundColor = '#d1fae5'; // Green for perfect match (delta = 0)
+                    row.style.backgroundColor = '#f0f9ff'; // Green for perfect match (delta = 0)
                 } else if (item.delta < 0) {
                     row.style.backgroundColor = '#fee2e2'; // Red for negative delta
                 }
@@ -1881,7 +1939,579 @@
             rows.forEach(row => tbody.appendChild(row));
         }
 
+        // ===== PENDING INVOICES TABLE SORTING =====
+        let pendingSortDirection = {};
+        
+        function sortPendingTable(columnIndex) {
+            const table = document.getElementById('pendingInvoicesTable');
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            // Skip if no rows to sort
+            if (rows.length === 0) return;
+            
+            // Determine sort direction - start with descending on first click
+            const currentDirection = pendingSortDirection[columnIndex] || 'desc';
+            const newDirection = currentDirection === 'desc' ? 'asc' : 'desc';
+            pendingSortDirection[columnIndex] = newDirection;
+            
+            // Update header indicators - show sort direction
+            const headers = table.querySelectorAll('th');
+            headers.forEach((header, index) => {
+                if (header.onclick) { // Only update sortable columns
+                    const originalText = header.textContent.replace(/[↑↓↕️]/g, '').trim();
+                    
+                    if (index === columnIndex) {
+                        const arrow = newDirection === 'asc' ? '↑' : '↓';
+                        header.innerHTML = originalText + ' ' + arrow;
+                    } else {
+                        header.innerHTML = originalText + ' ↕️';
+                    }
+                }
+            });
+            
+            // Sort rows
+            rows.sort((a, b) => {
+                let aValue = a.cells[columnIndex].textContent.trim();
+                let bValue = b.cells[columnIndex].textContent.trim();
+                
+                // Handle different column types
+                if (columnIndex === 1) {
+                    // Invoice # - extract just the invoice number part (remove badges)
+                    aValue = aValue.replace(/📝.*?|✓.*?/g, '').trim();
+                    bValue = bValue.replace(/📝.*?|✓.*?/g, '').trim();
+                    
+                    if (newDirection === 'asc') {
+                        return aValue.localeCompare(bValue);
+                    } else {
+                        return bValue.localeCompare(aValue);
+                    }
+                } else if (columnIndex === 2) {
+                    // Project - text comparison
+                    if (newDirection === 'asc') {
+                        return aValue.localeCompare(bValue);
+                    } else {
+                        return bValue.localeCompare(aValue);
+                    }
+                } else if (columnIndex === 12) {
+                    // Delta - numeric comparison (remove currency and convert to number)
+                    aValue = parseFloat(aValue.replace(/[€,+\s]/g, '').replace(/^-/, '-')) || 0;
+                    bValue = parseFloat(bValue.replace(/[€,+\s]/g, '').replace(/^-/, '-')) || 0;
+                    
+                    if (newDirection === 'asc') {
+                        return aValue - bValue;
+                    } else {
+                        return bValue - aValue;
+                    }
+                } else {
+                    // Default text comparison for other columns
+                    if (newDirection === 'asc') {
+                        return aValue.localeCompare(bValue);
+                    } else {
+                        return bValue.localeCompare(aValue);
+                    }
+                }
+            });
+            
+            // Re-append sorted rows
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
         // ===== INVOICE DETAILS FUNCTIONALITY =====
+        
+        // Interactive table toggle function
+        function toggleDetailsTable(tableType) {
+            const container = document.getElementById('interactiveTablesContainer');
+            
+            // Always clear container and show new table (no toggle behavior)
+            container.innerHTML = '';
+            
+            let tableToShow = null;
+            let sectionTitle = '';
+            let sectionToExpand = null; // Which cost section to expand
+            
+            switch(tableType) {
+                case 'invoice-internal':
+                case 'invoice-external':
+                case 'invoice-total':
+                    // All invoice-related clicks show invoice line items table
+                    const lineItemsSection = Array.from(document.querySelectorAll('#detailsContent .card')).find(card => 
+                        card.textContent.includes('Invoice Line Items') || card.textContent.includes('📋')
+                    );
+                    if (lineItemsSection) {
+                        tableToShow = lineItemsSection.cloneNode(true);
+                        sectionTitle = 'Invoice Line Items';
+                        
+                        // Determine which section to expand
+                        if (tableType === 'invoice-internal') {
+                            sectionToExpand = 'internal';
+                        } else if (tableType === 'invoice-external') {
+                            sectionToExpand = 'external';
+                        }
+                        // invoice-total doesn't expand a specific section
+                    }
+                    break;
+                    
+                case 'ppm':
+                    // Find PPM data section
+                    const ppmSection = Array.from(document.querySelectorAll('#detailsContent .card')).find(card => 
+                        card.textContent.includes('PPM Data Matches') || card.textContent.includes('📋 PPM Data')
+                    );
+                    if (ppmSection) {
+                        tableToShow = ppmSection.cloneNode(true);
+                        sectionTitle = 'PPM Internal Cost Data';
+                    }
+                    break;
+                    
+                case 'sap':
+                    // Find EXT SAP data section
+                    const sapSection = Array.from(document.querySelectorAll('#detailsContent .card')).find(card => 
+                        card.textContent.includes('EXT SAP Data Matches') || card.textContent.includes('📊 EXT SAP')
+                    );
+                    if (sapSection) {
+                        tableToShow = sapSection.cloneNode(true);
+                        sectionTitle = 'SAP External Cost Data';
+                    }
+                    break;
+                    
+                case 'both':
+                    // Show both PPM and SAP sections
+                    const ppmSectionBoth = Array.from(document.querySelectorAll('#detailsContent .card')).find(card => 
+                        card.textContent.includes('PPM Data Matches') || card.textContent.includes('📋 PPM Data')
+                    );
+                    const sapSectionBoth = Array.from(document.querySelectorAll('#detailsContent .card')).find(card => 
+                        card.textContent.includes('EXT SAP Data Matches') || card.textContent.includes('📊 EXT SAP')
+                    );
+                    
+                    if (ppmSectionBoth && sapSectionBoth) {
+                        const bothWrapper = document.createElement('div');
+                        bothWrapper.appendChild(ppmSectionBoth.cloneNode(true));
+                        bothWrapper.appendChild(sapSectionBoth.cloneNode(true));
+                        tableToShow = bothWrapper;
+                        sectionTitle = 'PPM + SAP Cost Data';
+                    }
+                    break;
+            }
+            
+            if (tableToShow) {
+                tableToShow.className += ' interactive-table';
+                tableToShow.dataset.tableType = tableType;
+                tableToShow.style.marginBottom = '1rem';
+                container.appendChild(tableToShow);
+                
+                // Expand the specific cost section if needed
+                if (sectionToExpand) {
+                    expandCostSection(tableToShow, sectionToExpand);
+                }
+                
+                // Special handling for SAP and both cases - collapse invoice sections
+                if (tableType === 'sap') {
+                    // When SAP is clicked, collapse any existing invoice line items sections
+                    collapseInvoiceLineSections(['internal']);
+                } else if (tableType === 'both') {
+                    // When PPM/SAP total is clicked, collapse both sections
+                    collapseInvoiceLineSections(['internal', 'external']);
+                }
+            }
+        }
+        
+        // Helper function to expand specific cost sections in invoice line items
+        function expandCostSection(tableElement, sectionType) {
+            // Find cost type sections within the cloned table
+            const costSections = tableElement.querySelectorAll('.cost-type-section');
+            
+            costSections.forEach(section => {
+                const header = section.querySelector('.cost-type-header');
+                const headerText = header ? header.textContent.toLowerCase() : '';
+                
+                // Check if this is the section we want to expand
+                const shouldExpand = (
+                    (sectionType === 'internal' && headerText.includes('internal')) ||
+                    (sectionType === 'external' && headerText.includes('external'))
+                );
+                
+                if (shouldExpand) {
+                    // Expand this section
+                    const content = section.querySelector('.cost-type-content');
+                    const expandBtn = section.querySelector('.expand-btn');
+                    
+                    if (content) {
+                        content.style.display = 'block';
+                    }
+                    if (expandBtn) {
+                        expandBtn.textContent = '▼';
+                    }
+                } else {
+                    // Collapse other sections
+                    const content = section.querySelector('.cost-type-content');
+                    const expandBtn = section.querySelector('.expand-btn');
+                    
+                    if (content) {
+                        content.style.display = 'none';
+                    }
+                    if (expandBtn) {
+                        expandBtn.textContent = '▶';
+                    }
+                }
+            });
+        }
+
+        // Helper function to collapse invoice line item sections in the hidden sections
+        function collapseInvoiceLineSections(sectionsToCollapse) {
+            const hiddenContainer = document.getElementById('hiddenSectionsContainer');
+            if (!hiddenContainer) return;
+            
+            const invoiceLineItems = Array.from(hiddenContainer.querySelectorAll('.card')).find(card => 
+                                       card.textContent.includes('Invoice Line Items') || card.textContent.includes('📋')
+                                   );
+            
+            if (invoiceLineItems) {
+                const costSections = invoiceLineItems.querySelectorAll('.cost-type-section');
+                
+                costSections.forEach(section => {
+                    const header = section.querySelector('.cost-type-header');
+                    const headerText = header ? header.textContent.toLowerCase() : '';
+                    
+                    const shouldCollapse = sectionsToCollapse.some(sectionType => 
+                        (sectionType === 'internal' && headerText.includes('internal')) ||
+                        (sectionType === 'external' && headerText.includes('external'))
+                    );
+                    
+                    if (shouldCollapse) {
+                        const content = section.querySelector('.cost-type-content');
+                        const expandBtn = section.querySelector('.expand-btn');
+                        
+                        if (content) {
+                            content.style.display = 'none';
+                        }
+                        if (expandBtn) {
+                            expandBtn.textContent = '▶';
+                        }
+                    }
+                });
+            }
+        }
+        
+        // Toggle all sections visibility
+        function toggleAllSections() {
+            const container = document.getElementById('hiddenSectionsContainer');
+            const button = document.getElementById('toggleAllSectionsBtn');
+            
+            if (container.style.display === 'none') {
+                container.style.display = 'block';
+                button.textContent = '🔼 Hide All Sections';
+                button.style.backgroundColor = '#f0f9ff';
+                button.style.color = '#92400e';
+            } else {
+                container.style.display = 'none';
+                button.textContent = '📋 Show All Sections';
+                button.style.backgroundColor = '#f3f4f6';
+                button.style.color = '#374151';
+            }
+        }
+        
+        // Enhanced filtering functions
+        function adjustMonthRange(direction) {
+            const monthSelector = document.getElementById('monthSelector');
+            const currentMonths = Array.from(monthSelector.options).map(option => option.value);
+            const currentSelected = Array.from(monthSelector.selectedOptions).map(option => option.value);
+            
+            // Define month sequence
+            const allMonths = [
+                'January', 'February', 'March', 'April', 'May', 'June',
+                'July', 'August', 'September', 'October', 'November', 'December'
+            ];
+            
+            // Get current year from first selected month or invoice date
+            const firstMonth = currentSelected[0] || currentMonths[0];
+            const parts = firstMonth.split(' ');
+            const monthName = parts[0];
+            
+            let year;
+            if (parts[1]) {
+                year = parseInt(parts[1]);
+            } else if (window.currentInvoice) {
+                // Use the same logic as in calculateInvoiceCosts - extract year from invoice date
+                const invoiceDate = getInvoiceDate(window.currentInvoice);
+                if (invoiceDate && invoiceDate.includes('.')) {
+                    const dateParts = invoiceDate.split('.');
+                    if (dateParts.length >= 3) {
+                        year = parseInt(dateParts[2]);
+                    } else {
+                        year = new Date().getFullYear();
+                    }
+                } else {
+                    year = new Date().getFullYear();
+                }
+            } else {
+                year = new Date().getFullYear();
+            }
+            
+            const currentIndex = allMonths.indexOf(monthName);
+            let newIndex = currentIndex + direction;
+            let newYear = year;
+            
+            // Handle year wraparound
+            if (newIndex < 0) {
+                newIndex = 11;
+                newYear = year - 1;
+            } else if (newIndex > 11) {
+                newIndex = 0;
+                newYear = year + 1;
+            }
+            
+            const newMonth = `${allMonths[newIndex]} ${newYear}`;
+            
+            // Add new month option if it doesn't exist
+            if (!currentMonths.includes(newMonth)) {
+                const option = document.createElement('option');
+                option.value = newMonth;
+                option.textContent = newMonth;
+                monthSelector.appendChild(option);
+            }
+            
+            // Select the new month (add to selection)
+            Array.from(monthSelector.options).forEach(option => {
+                if (option.value === newMonth) {
+                    option.selected = true;
+                }
+            });
+            
+            // Update filter
+            updateMonthFilter();
+        }
+        
+        function updateMonthFilter() {
+            const monthSelector = document.getElementById('monthSelector');
+            const selectedMonths = Array.from(monthSelector.selectedOptions).map(option => option.value);
+            console.log('🔄 Month filter updated:', selectedMonths);
+            
+            // Store selected months globally for filtering
+            window.selectedMonthsFilter = selectedMonths;
+            
+            // Re-generate current displayed table with new month filter
+            
+            // Also regenerate the main summary table with new months
+            const detailsContent = document.getElementById('detailsContent');
+            if (detailsContent && window.currentInvoice) {
+                // Find the invoice and regenerate details
+                const invoice = window.currentInvoice;
+                // Use the original invoice month for display purposes, but the filter logic will use selectedMonths
+                const monthOfInvoice = invoice.summary?.servicePeriod || 'Unknown';
+                
+                // Regenerate the entire details content
+                detailsContent.innerHTML = generateInvoiceDetailsHtml(invoice);
+            }
+            // Wait for DOM update, then regenerate any interactive table that was previously displayed
+            const interactiveContainer = document.getElementById('interactiveTablesContainer');
+            if (interactiveContainer.querySelector('.interactive-table')) {
+                const currentType = interactiveContainer.querySelector('.interactive-table').dataset.tableType;
+                // Clear and regenerate with new filter, but wait for DOM update first
+                interactiveContainer.innerHTML = '';
+                // Use setTimeout to ensure DOM has updated before cloning
+                setTimeout(() => {
+                    toggleDetailsTable(currentType);
+                }, 0);
+            }
+        }
+        
+        function addMoreMonths() {
+            const monthSelector = document.getElementById('monthSelector');
+            const currentOptions = Array.from(monthSelector.options).map(option => option.value);
+            
+            // Add common months (could be enhanced to show available months from data)
+            const monthsToAdd = ['January', 'February', 'March', 'April', 'May', 'June', 
+                               'July', 'August', 'September', 'October', 'November', 'December'];
+            
+            monthsToAdd.forEach(month => {
+                if (!currentOptions.includes(month)) {
+                    const option = document.createElement('option');
+                    option.value = month;
+                    option.textContent = month;
+                    monthSelector.appendChild(option);
+                }
+            });
+            
+            // Also add year variations for current month
+            const currentYear = new Date().getFullYear();
+            const currentMonth = monthSelector.options[0].value.split(' ')[0];
+            [currentYear - 1, currentYear + 1].forEach(year => {
+                const monthYear = `${currentMonth} ${year}`;
+                if (!currentOptions.includes(monthYear)) {
+                    const option = document.createElement('option');
+                    option.value = monthYear;
+                    option.textContent = monthYear;
+                    monthSelector.appendChild(option);
+                }
+            });
+        }
+        
+        function resetFilters() {
+            // Reset month selector to original month only
+            const monthSelector = document.getElementById('monthSelector');
+            const originalMonth = monthSelector.options[0].value;
+            
+            // Clear all options except the first one
+            while (monthSelector.options.length > 1) {
+                monthSelector.removeChild(monthSelector.lastChild);
+            }
+            
+            // Select only the original month
+            monthSelector.options[0].selected = true;
+            
+            // Clear selected months filter
+            window.selectedMonthsFilter = [originalMonth];
+            
+            // Clear interactive table
+            document.getElementById('interactiveTablesContainer').innerHTML = '';
+            
+            console.log('🔄 Filters reset to original month only');
+        }
+
+        function togglePpmNextMonth() {
+            console.log('🔧 PPM checkbox clicked!');
+            const checkbox = document.getElementById('ppmIncludeNextMonth');
+            if (!checkbox) {
+                console.log('❌ PPM checkbox not found!');
+                return;
+            }
+            if (!window.currentInvoice) {
+                console.log('❌ No current invoice!');
+                return;
+            }
+            
+            const invoice = window.currentInvoice;
+            console.log('🔍 Invoice data:', invoice.summary);
+            
+            // Get the month from the invoice extraction data
+            let originalMonth = 'Unknown';
+            if (invoice.fullInvoiceData && invoice.fullInvoiceData[0]?.monthOfInvoice) {
+                originalMonth = invoice.fullInvoiceData[0].monthOfInvoice;
+            } else {
+                // Extract from invoice date
+                const invoiceDate = getInvoiceDate(invoice);
+                if (invoiceDate && invoiceDate.includes('.')) {
+                    const dateParts = invoiceDate.split('.');
+                    if (dateParts.length >= 3) {
+                        const month = parseInt(dateParts[1]);
+                        const year = parseInt(dateParts[2]);
+                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                                          'July', 'August', 'September', 'October', 'November', 'December'];
+                        if (month >= 1 && month <= 12) {
+                            originalMonth = `${monthNames[month - 1]} ${year}`;
+                        }
+                    }
+                }
+            }
+            
+            console.log('🔍 Original month determined:', originalMonth);
+            
+            if (checkbox.checked) {
+                // Add next month to filter
+                const nextMonth = getNextMonth(originalMonth);
+                window.selectedMonthsFilter = [originalMonth, nextMonth];
+                console.log('✅ PPM: Including next month:', nextMonth);
+                console.log('✅ PPM: Selected months filter:', window.selectedMonthsFilter);
+            } else {
+                // Use only original month
+                window.selectedMonthsFilter = [originalMonth];
+                console.log('❌ PPM: Using only original month:', originalMonth);
+                console.log('❌ PPM: Selected months filter:', window.selectedMonthsFilter);
+            }
+            
+            // Regenerate only the summary table and preserve interactive tables
+            console.log('🔄 PPM: Calling refreshInvoiceDataWithFilters...');
+            refreshInvoiceDataWithFilters();
+        }
+
+        function toggleSapMonthFilter() {
+            const checkbox = document.getElementById('sapRemoveMonthFilter');
+            if (!checkbox || !window.currentInvoice) return;
+            
+            if (checkbox.checked) {
+                // Remove month filtering for SAP data
+                window.sapShowAllMonths = true;
+                console.log('✅ SAP: Showing all months (no filter)');
+            } else {
+                // Use month filtering for SAP data
+                window.sapShowAllMonths = false;
+                console.log('❌ SAP: Using month filter');
+            }
+            
+            // Regenerate only the summary table and preserve interactive tables
+            refreshInvoiceDataWithFilters();
+        }
+
+        function refreshInvoiceDataWithFilters() {
+            if (!window.currentInvoice) return;
+            
+            const invoice = window.currentInvoice;
+            
+            // Save the current states
+            const interactiveContainer = document.getElementById('interactiveTablesContainer');
+            const currentInteractiveTable = interactiveContainer.querySelector('.interactive-table');
+            const currentTableType = currentInteractiveTable ? currentInteractiveTable.dataset.tableType : null;
+            
+            // Save checkbox states
+            const ppmCheckbox = document.getElementById('ppmIncludeNextMonth');
+            const sapCheckbox = document.getElementById('sapRemoveMonthFilter');
+            const ppmChecked = ppmCheckbox ? ppmCheckbox.checked : false;
+            const sapChecked = sapCheckbox ? sapCheckbox.checked : false;
+            
+            // Regenerate the main details content
+            const detailsContent = document.getElementById('detailsContent');
+            if (detailsContent) {
+                detailsContent.innerHTML = generateInvoiceDetailsHtml(invoice);
+                
+                // Restore checkbox states
+                setTimeout(() => {
+                    const newPpmCheckbox = document.getElementById('ppmIncludeNextMonth');
+                    const newSapCheckbox = document.getElementById('sapRemoveMonthFilter');
+                    if (newPpmCheckbox) newPpmCheckbox.checked = ppmChecked;
+                    if (newSapCheckbox) newSapCheckbox.checked = sapChecked;
+                    
+                    // Restore interactive table if one was displayed
+                    if (currentTableType) {
+                        toggleDetailsTable(currentTableType);
+                    }
+                }, 0);
+            }
+        }
+
+        function getNextMonth(monthString) {
+            const allMonths = ['January', 'February', 'March', 'April', 'May', 'June',
+                             'July', 'August', 'September', 'October', 'November', 'December'];
+            
+            const parts = monthString.split(' ');
+            const monthName = parts[0];
+            
+            // Extract year from invoice date if not in month string
+            let year;
+            if (parts[1]) {
+                year = parseInt(parts[1]);
+            } else if (window.currentInvoice) {
+                const invoiceDate = getInvoiceDate(window.currentInvoice);
+                if (invoiceDate && invoiceDate.includes('.')) {
+                    const dateParts = invoiceDate.split('.');
+                    year = dateParts.length >= 3 ? parseInt(dateParts[2]) : new Date().getFullYear();
+                } else {
+                    year = new Date().getFullYear();
+                }
+            } else {
+                year = new Date().getFullYear();
+            }
+            
+            const currentIndex = allMonths.indexOf(monthName);
+            let nextIndex = currentIndex + 1;
+            let nextYear = year;
+            
+            if (nextIndex > 11) {
+                nextIndex = 0;
+                nextYear = year + 1;
+            }
+            
+            return `${allMonths[nextIndex]} ${nextYear}`;
+        }
         
         async function loadInvoiceDetails(invoiceNumber) {
             console.log(`🔍 Loading details for invoice: ${invoiceNumber}`);
@@ -1894,6 +2524,9 @@
             console.log('🔍 All pending invoices:', pendingInvoices);
             const invoice = pendingInvoices.find(inv => inv.invoiceNumber === invoiceNumber);
             console.log('🔍 Found invoice for details:', invoice);
+            
+            // Store current invoice for month filter updates
+            window.currentInvoice = invoice;
             
             if (!invoice) {
                 // Show placeholder and clear content
@@ -1925,6 +2558,28 @@
             // Generate the detailed analysis
             const detailsHtml = generateInvoiceDetailsHtml(invoice);
             detailsContent.innerHTML = detailsHtml;
+            
+            // Auto-show PPM cost data by default
+            setTimeout(() => {
+                toggleDetailsTable('ppm'); // Show PPM cost data table
+            }, 100);
+        }
+
+        function getComparisonColor(invoiceValue, referenceValue) {
+            // Allow small rounding errors (within 0.01 for currency, 1 for hours)
+            const tolerance = (invoiceValue > 10) ? 1 : 0.01;
+            const diff = Math.abs(invoiceValue - referenceValue);
+            
+            if (diff <= tolerance) {
+                // Values match (green)
+                return '#dcfce7'; // Light green
+            } else if (invoiceValue > referenceValue) {
+                // Invoice higher than reference (red)
+                return '#fee2e2'; // Light red
+            } else {
+                // Reference higher than invoice (light blue like header)
+                return '#f0f9ff'; // Light blue
+            }
         }
         
         function generateInvoiceDetailsHtml(invoice) {
@@ -1932,6 +2587,18 @@
             const invoiceData = invoice.fullInvoiceData && invoice.fullInvoiceData[0] ? invoice.fullInvoiceData[0] : {};
             const projectId = invoiceData.projectId || 'Unknown';
             const wbsCode = standardizeWBS(projectId);
+            
+            // Try to get project name from validation data
+            let projectName = 'Unknown Project';
+            if (validationData.ppmData && projectId !== 'Unknown') {
+                const matchingProject = validationData.ppmData.find(row => {
+                    const rowWbs = standardizeWBS(row['WBS Element ID'] || row['Project'] || row.project);
+                    return rowWbs === wbsCode;
+                });
+                if (matchingProject) {
+                    projectName = matchingProject['Project Name'] || matchingProject['Project Description'] || matchingProject['Description'] || projectName;
+                }
+            }
             const invoiceDate = invoiceData.dateOfInvoice || 'Unknown';
             const monthOfInvoice = invoiceData.monthOfInvoice || 'Unknown';
             const invoiceTotal = invoiceData.extractedInvoiceTotal || 0;
@@ -1940,84 +2607,105 @@
             // Calculate costs using the same logic as pending invoices table
             const costs = calculateInvoiceCosts(invoice, monthOfInvoice);
             
+            // Calculate detailed data for interactive summary
+            const detailedData = calculateDetailedInvoiceData(invoice, monthOfInvoice);
+            
             // Get detailed cost breakdown
             const costBreakdown = getDetailedCostBreakdown(invoice, monthOfInvoice);
             
             return `
-                <!-- Invoice Summary Card -->
-                <div class="card" style="margin-bottom: 1.5rem; padding: 0.8rem; ${creditNote ? 'background: #f0f9ff; border-left: 4px solid #0ea5e9;' : ''}">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2rem; margin: 0.5rem 0;">
-                        <div>
-                            <strong>Project:</strong><br>
-                            <span style="font-family: monospace;">${projectId}</span>
-                        </div>
-                        <div>
-                            <strong>Invoice Date:</strong><br>
-                            ${invoiceDate}<br>
-                            <small>Month: ${monthOfInvoice}</small>
-                        </div>
-                        <div>
-                            <strong>Total Amount:</strong><br>
-                            <span style="font-size: 1.2rem; font-weight: bold; color: ${creditNote ? '#0ea5e9' : '#059669'};">
-                                ${formatCurrency(invoiceTotal)} ${invoiceData.currency || 'EUR'}
-                            </span><br>
-                            <small>${creditNote ? 'Credit Note' : 'Invoice'}</small>
-                        </div>
+                <!-- Compact Header -->
+                <div style="margin-bottom: 1rem; padding: 0.5rem 0; display: flex; align-items: center; gap: 2rem;">
+                    <div>
+                        <strong style="font-size: 1.3rem;">${invoiceNumber}</strong>
+                        ${creditNote ? ' <span style="color: #0ea5e9; font-size: 0.8rem;">📝 Credit Note</span>' : ''}
+                    </div>
+                    <div>
+                        <span style="font-family: monospace; font-size: 1.2rem; font-weight: bold; color: #374151;">${projectId}</span>
+                        ${projectName !== 'Unknown Project' ? ` <span style="font-size: 1rem; color: #6b7280; margin-left: 0.5rem;">- ${projectName}</span>` : ''}
                     </div>
                 </div>
                 
-                <!-- Cost Comparison Card -->
-                <div class="card" style="margin-bottom: 1.5rem;">
-                    <h4>💰 Cost Comparison (Month: ${monthOfInvoice})</h4>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2rem; margin: 1rem 0;">
-                        <div>
-                            <strong>Internal Cost (PPM):</strong><br>
-                            <span style="font-size: 1.1rem; font-weight: bold;">
-                                ${formatCurrency(costs.internalCost)} EUR
-                            </span><br>
-                            <small>From PPM data</small>
-                        </div>
-                        <div>
-                            <strong>External Cost (EXT SAP):</strong><br>
-                            <span style="font-size: 1.1rem; font-weight: bold;">
-                                ${formatCurrency(costs.externalCost)} EUR
-                            </span><br>
-                            <small>From EXT SAP data</small>
-                        </div>
-                        <div>
-                            <strong>Total cost:</strong><br>
-                            <span style="font-size: 1.1rem; font-weight: bold;">
-                                ${formatCurrency(costs.totalCost)} EUR
-                            </span><br>
-                            <small>PPM + EXT SAP</small>
-                        </div>
-                        <div>
-                            <strong>Total cost -/- Invoice:</strong><br>
-                            <span style="font-size: 1.1rem; font-weight: bold; color: ${Math.abs(invoiceTotal - costs.totalCost) < 0.01 ? '#059669' : ((invoiceTotal - costs.totalCost) < 0 ? '#dc2626' : 'inherit')};">
-                                ${invoiceTotal - costs.totalCost >= 0 ? '+' : ''}${formatCurrency(invoiceTotal - costs.totalCost)} EUR
-                            </span><br>
-                            <small>${Math.abs(invoiceTotal - costs.totalCost) < 0.01 ? 'Match' : 'Variance'}</small>
-                        </div>
-                    </div>
+                <!-- Interactive Summary Line -->
+                <div style="margin-bottom: 1.5rem; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <table style="width: 100%; font-size: 0.8rem; table-layout: auto; border-collapse: collapse;">
+                        <thead>
+                            <!-- Top header row with merged cells -->
+                            <tr style="font-size: 0.75rem; background-color: #f0f9ff; border-bottom: 2px solid #3b82f6;">
+                                <th colspan="4" style="text-align: center; background-color: #f0f9ff; border: 2px solid #3b82f6; font-weight: bold; padding: 4px;">Internal Costs</th>
+                                <th colspan="2" style="text-align: center; background-color: #f0f9ff; border: 2px solid #3b82f6; font-weight: bold; padding: 4px;">External Costs</th>
+                                <th colspan="2" style="text-align: center; background-color: #f0f9ff; border: 2px solid #3b82f6; font-weight: bold; padding: 4px;">Total Costs</th>
+                            </tr>
+                            <!-- Bottom header row with individual column names -->
+                            <tr style="font-size: 0.75rem;">
+                                <th style="background-color: #f0f9ff; padding: 4px; cursor: pointer;" onclick="toggleDetailsTable('invoice-internal')">Invoice<br>hrs</th>
+                                <th style="background-color: #f0f9ff; padding: 4px; cursor: pointer;" onclick="toggleDetailsTable('ppm')">PPM<br>hrs</th>
+                                <th style="background-color: #f0f9ff; padding: 4px; cursor: pointer;" onclick="toggleDetailsTable('invoice-internal')">Invoice<br>cost</th>
+                                <th style="background-color: #f0f9ff; padding: 4px; cursor: pointer;" onclick="toggleDetailsTable('ppm')">PPM<br>cost</th>
+                                <th style="background-color: #f0f9ff; padding: 4px; cursor: pointer;" onclick="toggleDetailsTable('invoice-external')">Invoice<br>ext cost</th>
+                                <th style="background-color: #f0f9ff; padding: 4px; cursor: pointer;" onclick="toggleDetailsTable('sap')">SAP<br>ext cost</th>
+                                <th style="background-color: #f0f9ff; padding: 4px; cursor: pointer;" onclick="toggleDetailsTable('invoice-total')">Invoice<br>total</th>
+                                <th style="background-color: #f0f9ff; padding: 4px; cursor: pointer;" onclick="toggleDetailsTable('both')">PPM/SAP<br>total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="background-color: white;">
+                                <!-- Internal Hours: Invoice vs PPM -->
+                                <td style="background-color: ${getComparisonColor(detailedData.invoiceInternalHours, detailedData.ppmInternalHours)}; padding: 4px 8px; text-align: center; cursor: pointer;" onclick="toggleDetailsTable('invoice-internal')">${detailedData.invoiceInternalHours.toFixed(0)}</td>
+                                <td style="background-color: ${getComparisonColor(detailedData.invoiceInternalHours, detailedData.ppmInternalHours)}; padding: 4px 8px; text-align: center; cursor: pointer;" onclick="toggleDetailsTable('ppm')">${detailedData.ppmInternalHours.toFixed(0)}</td>
+                                <!-- Internal Cost: Invoice vs PPM -->
+                                <td style="background-color: ${getComparisonColor(detailedData.invoiceInternalCost, detailedData.ppmInternalCost)}; padding: 4px 8px; text-align: center; cursor: pointer;" onclick="toggleDetailsTable('invoice-internal')">${formatCurrencyNoDecimals(detailedData.invoiceInternalCost)}</td>
+                                <td style="background-color: ${getComparisonColor(detailedData.invoiceInternalCost, detailedData.ppmInternalCost)}; padding: 4px 8px; text-align: center; cursor: pointer;" onclick="toggleDetailsTable('ppm')">${formatCurrencyNoDecimals(detailedData.ppmInternalCost)}</td>
+                                <!-- External Cost: Invoice vs SAP -->
+                                <td style="background-color: ${getComparisonColor(detailedData.invoiceExternalCost, detailedData.sapExternalCost)}; padding: 4px 8px; text-align: center; cursor: pointer;" onclick="toggleDetailsTable('invoice-external')">${formatCurrencyNoDecimals(detailedData.invoiceExternalCost)}</td>
+                                <td style="background-color: ${getComparisonColor(detailedData.invoiceExternalCost, detailedData.sapExternalCost)}; padding: 4px 8px; text-align: center; cursor: pointer;" onclick="toggleDetailsTable('sap')">${formatCurrencyNoDecimals(detailedData.sapExternalCost)}</td>
+                                <!-- Total Cost: Invoice vs PPM/SAP -->
+                                <td style="background-color: ${getComparisonColor(detailedData.invoiceTotalCost, detailedData.ppmSapTotalCost)}; padding: 4px 8px; text-align: center; cursor: pointer;" onclick="toggleDetailsTable('invoice-total')"><strong>${formatCurrencyNoDecimals(detailedData.invoiceTotalCost)}</strong></td>
+                                <td style="background-color: ${getComparisonColor(detailedData.invoiceTotalCost, detailedData.ppmSapTotalCost)}; padding: 4px 8px; text-align: center; cursor: pointer;" onclick="toggleDetailsTable('both')"><strong>${formatCurrencyNoDecimals(detailedData.ppmSapTotalCost)}</strong></td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
                 
-                <!-- Invoice Line Items -->
-                ${generateInvoiceLineItemsHtml(invoice)}
-                
-                <!-- Detailed Cost Breakdown -->
-                ${generateDetailedCostBreakdownHtml(costBreakdown, monthOfInvoice)}
-                
-                <!-- Actions -->
-                <div class="card" style="text-align: center;">
-                    <h4>🎯 Actions</h4>
-                    <div style="display: flex; justify-content: center; gap: 1rem;">
-                        <button class="btn btn-success" onclick="handleApproveInvoice('${invoiceNumber}')">
-                            ✅ Approve Invoice
+                <!-- Invoice Actions -->
+                <div style="margin-bottom: 1rem; padding: 1rem; background-color: #f8fafc; border-radius: 8px; border: 1px solid #e5e7eb;">
+                    <div style="display: flex; gap: 1rem; align-items: center; justify-content: center;">
+                        <button class="btn btn-success" onclick="handleApproveInvoice('${invoiceNumber}')" style="padding: 0.5rem 1rem;">
+                            ✅ Approve
                         </button>
-                        <button class="btn btn-warning" onclick="handleRejectInvoice('${invoiceNumber}')">
-                            ❌ Reject Invoice  
+                        <button class="btn btn-warning" onclick="handleRejectInvoice('${invoiceNumber}')" style="padding: 0.5rem 1rem;">
+                            ❌ Reject
                         </button>
+                        <p style="margin: 0; font-size: 0.9rem; color: #6b7280;">
+                            Use checkboxes below to adjust data filtering
+                        </p>
                     </div>
+                </div>
+                              
+                <!-- Interactive Tables Container -->
+                <!-- User Instruction -->
+                <div style="background-color: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; text-align: center;">
+                    <p style="margin: 0; color: #0369a1; font-size: 0.9rem;">
+                        💡 <strong>Tip:</strong> Click on any cell in the colorful table above to view detailed data tables below
+                    </p>
+                </div>
+                
+                <div id="interactiveTablesContainer" style="margin-bottom: 1.5rem;"></div>
+                
+                <!-- Show All Sections Toggle -->
+                <div style="margin-bottom: 1rem; text-align: center;">
+                    <button class="btn" onclick="toggleAllSections()" id="toggleAllSectionsBtn" style="background-color: #f3f4f6; color: #374151;">
+                        📋 Show All Sections
+                    </button>
+                </div>
+                
+                <!-- Hidden Sections Container -->
+                <div id="hiddenSectionsContainer" style="display: none;">
+                    <!-- Invoice Line Items -->
+                    ${generateInvoiceLineItemsHtml(invoice)}
+                    
+                    <!-- Detailed Cost Breakdown -->
+                    ${generateDetailedCostBreakdownHtml(costBreakdown, monthOfInvoice)}
                 </div>
             `;
         }
@@ -2151,32 +2839,36 @@
             const wbsCode = standardizeWBS(projectId);
             const invoiceDate = getInvoiceDate(invoice);
             
+            // Use selected months filter if available, otherwise default to single month
+            const selectedMonths = window.selectedMonthsFilter || [monthOfInvoice];
+            const monthNames = selectedMonths.map(month => month ? month.split(' ')[0] : null).filter(Boolean);
+            
             const breakdown = {
                 ppmData: [],
                 extSapData: [],
                 filters: {
                     wbsCode: wbsCode,
                     monthOfInvoice: monthOfInvoice,
+                    selectedMonths: selectedMonths,
                     invoiceDate: invoiceDate
                 }
             };
             
-            // Get PPM data matches
+            // Get PPM data matches - now supports multiple months
             if (validationData.ppmData) {
-                const invoiceMonthName = monthOfInvoice ? monthOfInvoice.split(' ')[0] : null;
-                
                 validationData.ppmData.forEach(row => {
                     // Support both CTC (WBS Element ID) and RTC (Project) formats
                     const rowWbs = standardizeWBS(row['WBS Element ID'] || row['Project'] || row.project);
                     const rowMonthOfInvoice = row['Month of invoice'];
                     
-                    if (rowWbs === wbsCode && rowMonthOfInvoice === invoiceMonthName) {
+                    if (rowWbs === wbsCode && monthNames.includes(rowMonthOfInvoice)) {
                         breakdown.ppmData.push({
                             wbs: rowWbs,
                             month: rowMonthOfInvoice,
                             user: row.User || '-',
                             role: row['Role 2025'] || '-',
                             rate: row['Rate 2025'] || 0,
+                            hours: parseExcelNumericValue(row['Hours']) || parseExcelNumericValue(row['hours']) || parseExcelNumericValue(row['Hrs']) || parseExcelNumericValue(row['hrs']) || parseExcelNumericValue(row['Quantity']) || parseExcelNumericValue(row['quantity']) || parseExcelNumericValue(row['Total']) || parseExcelNumericValue(row['total']) || 0,
                             cost: parseExcelNumericValue(row['Cost €']),
                             project: row['Project Name'] || '-'
                         });
@@ -2184,27 +2876,69 @@
                 });
             }
             
-            // Get EXT SAP data matches
+            // Get EXT SAP data matches - now supports multiple months
             if (validationData.extSapData) {
-                let targetPeriod = null;
-                let targetFiscalYear = null;
+                // Check if SAP should show all months or filter by invoice month
+                if (window.sapShowAllMonths) {
+                    // No month filtering - process all SAP rows for this WBS
+                    console.log(`🔍 SAP Details: Showing ALL months for WBS=${wbsCode}`);
+                    validationData.extSapData.forEach(row => {
+                        const rowWbs = standardizeWBS(row['WBS Element'] || row['WBS Element ID'] || row['WBS'] || row['Project'] || row.project);
+                        if (rowWbs === wbsCode) {
+                            breakdown.extSapData.push({
+                                wbs: rowWbs,
+                                period: parseInt(row['Period']),
+                                fiscalYear: parseInt(row['Fiscal Year']),
+                                supplier: row['Name of offsetting account'] || '-',
+                                value: parseExcelNumericValue(row.Value),
+                                documentDate: row['Document Date'] || '-',
+                                source: 'EXT SAP'
+                            });
+                        }
+                    });
+                } else {
+                    // Filter by invoice month only
+                    const sapSelectedMonths = [monthOfInvoice]; // SAP filtering is independent of PPM
+                    const targetPeriods = [];
+                    sapSelectedMonths.forEach(monthStr => {
+                        if (monthStr && monthStr !== 'Unknown') {
+                            const parts = monthStr.split(' ');
+                            if (parts.length >= 2) {
+                                const monthName = parts[0];
+                                const year = parseInt(parts[1]);
+                                const monthIndex = ['January', 'February', 'March', 'April', 'May', 'June',
+                                                  'July', 'August', 'September', 'October', 'November', 'December'].indexOf(monthName);
+                                if (monthIndex >= 0) {
+                                    targetPeriods.push({ period: monthIndex + 1, fiscalYear: year });
+                                }
+                            }
+                        }
+                    });
                 
-                if (invoiceDate && invoiceDate !== 'Unknown') {
+                // If no valid periods from selected months, fall back to invoice date
+                if (targetPeriods.length === 0 && invoiceDate && invoiceDate !== 'Unknown') {
                     const dateParts = invoiceDate.split('.');
                     if (dateParts.length >= 3) {
-                        targetPeriod = parseInt(dateParts[1]);
-                        targetFiscalYear = parseInt(dateParts[2]);
+                        targetPeriods.push({
+                            period: parseInt(dateParts[1]),
+                            fiscalYear: parseInt(dateParts[2])
+                        });
                     }
                 }
                 
-                if (targetPeriod && targetFiscalYear) {
+                if (targetPeriods.length > 0) {
                     validationData.extSapData.forEach(row => {
                         // Support all 3 RTC scenarios: full WBS, partial in WBS Element, or partial in Project column
                         const rowWbs = standardizeWBS(row['WBS Element'] || row['WBS Element ID'] || row['WBS'] || row['Project'] || row.project);
                         const period = parseInt(row['Period']);
                         const fiscalYear = parseInt(row['Fiscal Year']);
                         
-                        if (rowWbs === wbsCode && period === targetPeriod && fiscalYear === targetFiscalYear) {
+                        // Check if this row matches any of the target periods
+                        const periodMatch = targetPeriods.some(target => 
+                            period === target.period && fiscalYear === target.fiscalYear
+                        );
+                        
+                        if (rowWbs === wbsCode && periodMatch) {
                             breakdown.extSapData.push({
                                 wbs: rowWbs,
                                 period: period,
@@ -2219,6 +2953,7 @@
                         }
                     });
                 }
+                } // Close the else block for window.sapShowAllMonths
             }
             
             return breakdown;
@@ -2236,7 +2971,13 @@
             
             // PPM Data Table
             html += `
-                <h5 style="color: #7c3aed; margin-top: 1.5rem;">📋 PPM Data Matches (${breakdown.ppmData.length} rows)</h5>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 1.5rem;">
+                    <h5 style="color: #7c3aed; margin: 0;">📋 PPM Data Matches (${breakdown.ppmData.length} rows)</h5>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: #6b7280;">
+                        <input type="checkbox" id="ppmIncludeNextMonth" onchange="togglePpmNextMonth()" style="margin: 0;">
+                        Include next month
+                    </label>
+                </div>
             `;
             
             if (breakdown.ppmData.length > 0) {
@@ -2247,7 +2988,7 @@
                                 <tr>
                                     <th>User</th>
                                     <th>Role</th>
-                                    <th>Rate</th>
+                                    <th>Hrs</th>
                                     <th>Cost €</th>
                                     <th>Month</th>
                                     <th>Project</th>
@@ -2261,7 +3002,7 @@
                         <tr>
                             <td>${item.user}</td>
                             <td>${item.role}</td>
-                            <td>${formatCurrency(item.rate)}</td>
+                            <td>${item.hours.toFixed(1)}</td>
                             <td><strong>${formatCurrency(item.cost)}</strong></td>
                             <td>${item.month}</td>
                             <td style="max-width: 200px;">${item.project}</td>
@@ -2289,7 +3030,13 @@
             
             // EXT SAP Data Table
             html += `
-                <h5 style="color: #dc2626; margin-top: 1.5rem;">📊 EXT SAP Data Matches (${breakdown.extSapData.length} rows)</h5>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 1.5rem;">
+                    <h5 style="color: #dc2626; margin: 0;">📊 EXT SAP Data Matches (${breakdown.extSapData.length} rows)</h5>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: #6b7280;">
+                        <input type="checkbox" id="sapRemoveMonthFilter" onchange="toggleSapMonthFilter()" style="margin: 0;">
+                        Show all months
+                    </label>
+                </div>
             `;
             
             if (breakdown.extSapData.length > 0) {
@@ -2420,11 +3167,13 @@
             
             console.log(`🔍 Calculating costs for invoice ${getInvoiceNumber(invoice)}: WBS=${wbsCode}, Month=${monthOfInvoice}, Date=${invoiceDate}`);
             
-            // Process PPM data (internal costs) - FILTER BY MONTH OF INVOICE
+            // Process PPM data (internal costs) - SUPPORT MULTI-MONTH FILTERING
             if (validationData.ppmData) {
-                // Extract just the month name from monthOfInvoice (e.g., "April 2025" -> "April")
-                const invoiceMonthName = monthOfInvoice ? monthOfInvoice.split(' ')[0] : null;
-                console.log(`🔍 PPM Filtering: Looking for WBS=${wbsCode}, Month=${invoiceMonthName} (from ${monthOfInvoice})`);
+                // Support multi-month filtering or default to invoice month
+                const selectedMonths = window.selectedMonthsFilter || [monthOfInvoice];
+                const monthNames = selectedMonths.map(month => month ? month.split(' ')[0] : null).filter(Boolean);
+                
+                console.log(`🔍 PPM Filtering: Looking for WBS=${wbsCode}, Months=${monthNames.join(', ')} (from selected: ${selectedMonths.join(', ')})`);
                 console.log(`🔍 PPM Data available: ${validationData.ppmData.length} rows`);
                 
                 let ppmChecked = 0;
@@ -2440,8 +3189,8 @@
                         console.log(`🔍 PPM Row ${ppmChecked}: WBS=${rowWbs}, Month=${rowMonthOfInvoice}`);
                     }
                     
-                    // Match both WBS and Month name only (not year)
-                    if (rowWbs === wbsCode && rowMonthOfInvoice === invoiceMonthName) {
+                    // Match both WBS and Month name (support multiple months)
+                    if (rowWbs === wbsCode && monthNames.includes(rowMonthOfInvoice)) {
                         const cost = parseExcelNumericValue(row['Cost €']);
                         internalCost += cost;
                         ppmMatches++;
@@ -2455,22 +3204,36 @@
                 console.log(`❌ PPM data not available for filtering`);
             }
             
-            // Process EXT SAP data (external costs) - FILTER BY PERIOD AND FISCAL YEAR
+            // Process EXT SAP data (external costs) - SUPPORT MULTI-MONTH FILTERING  
             if (validationData.extSapData) {
-                // Extract month and year from invoice date (format: dd.mm.yyyy)
-                let targetPeriod = null;
-                let targetFiscalYear = null;
+                // SAP has its own filtering logic, separate from PPM
+                const selectedMonths = [monthOfInvoice]; // SAP always uses only the original invoice month
+                const targetPeriods = [];
                 
-                if (invoiceDate && invoiceDate !== 'Unknown') {
+                // Extract periods and fiscal years from all selected months
+                selectedMonths.forEach(month => {
+                    if (month && month.includes(' ')) {
+                        const [monthName, year] = month.split(' ');
+                        const monthNumber = getMonthNumber(monthName); // Convert "April" -> 4
+                        if (monthNumber && year) {
+                            targetPeriods.push({ period: monthNumber, fiscalYear: parseInt(year) });
+                        }
+                    }
+                });
+                
+                // Fallback to invoice date if no valid periods from selection
+                if (targetPeriods.length === 0 && invoiceDate && invoiceDate !== 'Unknown') {
                     const dateParts = invoiceDate.split('.');
                     if (dateParts.length >= 3) {
-                        targetPeriod = parseInt(dateParts[1]); // Month as number (04 -> 4)
-                        targetFiscalYear = parseInt(dateParts[2]); // Year (2025)
+                        const period = parseInt(dateParts[1]);
+                        const fiscalYear = parseInt(dateParts[2]);
+                        targetPeriods.push({ period, fiscalYear });
                     }
                 }
                 
-                if (targetPeriod && targetFiscalYear) {
-                    console.log(`🔍 EXT SAP Filtering: Looking for WBS=${wbsCode}, Period=${targetPeriod}, FiscalYear=${targetFiscalYear}`);
+                // Check if we should show all months or filter by periods
+                if (window.sapShowAllMonths) {
+                    console.log(`🔍 EXT SAP Filtering: Showing ALL months for WBS=${wbsCode}`);
                     console.log(`🔍 EXT SAP Data available: ${validationData.extSapData.length} rows`);
                     
                     let extSapChecked = 0;
@@ -2484,20 +3247,41 @@
                         
                         extSapChecked++;
                         if (extSapChecked <= 5) {
-                            console.log(`🔍 EXT SAP Row ${extSapChecked}: WBS=${rowWbs}, Period=${period}, FiscalYear=${fiscalYear}`, {
-                                'Raw WBS Sources': {
-                                    'WBS Element': row['WBS Element'],
-                                    'WBS Element ID': row['WBS Element ID'], 
-                                    'WBS': row['WBS'],
-                                    'Project': row['Project'],
-                                    'project': row.project
-                                },
-                                'Target': `WBS=${wbsCode}, Period=${targetPeriod}, FiscalYear=${targetFiscalYear}`
-                            });
+                            console.log(`🔍 EXT SAP Row ${extSapChecked}: WBS=${rowWbs}, Period=${period}, FiscalYear=${fiscalYear} (ALL MONTHS MODE)`);
                         }
                         
-                        // Match WBS, Period (month), and Fiscal Year
-                        if (rowWbs === wbsCode && period === targetPeriod && fiscalYear === targetFiscalYear) {
+                        // Match WBS only (no period filtering)
+                        if (rowWbs === wbsCode) {
+                            const cost = parseExcelNumericValue(row.Value);
+                            externalCost += cost;
+                            extSapMatches++;
+                            
+                            console.log(`✅ EXT SAP match ${extSapMatches} (ALL MONTHS): WBS=${rowWbs}, Period=${period}, FiscalYear=${fiscalYear}, Cost=${cost}`);
+                        }
+                    });
+                    
+                    console.log(`🎯 EXT SAP Summary (ALL MONTHS): Checked ${extSapChecked} rows, matched ${extSapMatches} rows, total cost: ${formatCurrency(externalCost)}`);
+                } else if (targetPeriods.length > 0) {
+                    console.log(`🔍 EXT SAP Filtering: Looking for WBS=${wbsCode}, Periods=${targetPeriods.map(p => `${p.period}/${p.fiscalYear}`).join(', ')}`);
+                    console.log(`🔍 EXT SAP Data available: ${validationData.extSapData.length} rows`);
+                    
+                    let extSapChecked = 0;
+                    let extSapMatches = 0;
+                    
+                    validationData.extSapData.forEach(row => {
+                        // Support all 3 RTC scenarios: full WBS, partial in WBS Element, or partial in Project column
+                        const rowWbs = standardizeWBS(row['WBS Element'] || row['WBS Element ID'] || row['WBS'] || row['Project'] || row.project);
+                        const period = parseInt(row['Period']); // Month as number
+                        const fiscalYear = parseInt(row['Fiscal Year']); // Year
+                        
+                        extSapChecked++;
+                        if (extSapChecked <= 5) {
+                            console.log(`🔍 EXT SAP Row ${extSapChecked}: WBS=${rowWbs}, Period=${period}, FiscalYear=${fiscalYear}`);
+                        }
+                        
+                        // Match WBS and any of the target periods
+                        const periodMatch = targetPeriods.some(target => target.period === period && target.fiscalYear === fiscalYear);
+                        if (rowWbs === wbsCode && periodMatch) {
                             const cost = parseExcelNumericValue(row.Value);
                             externalCost += cost;
                             extSapMatches++;
@@ -2521,6 +3305,142 @@
             console.log(`📊 Final costs for ${getInvoiceNumber(invoice)}: Internal=${internalCost}, External=${externalCost}, Total=${result.totalCost}`);
             
             return result;
+        }
+
+        // ===== CURRENCY FORMATTING FOR INVOICE TABLE =====
+        function formatCurrencyNoDecimals(amount, currency = 'EUR') {
+            if (amount === null || amount === undefined || isNaN(amount)) {
+                return `€0`;
+            }
+            
+            const formatter = new Intl.NumberFormat('de-DE', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            });
+            
+            return `€${formatter.format(amount)}`;
+        }
+
+        // ===== ENHANCED COST AND HOURS CALCULATION =====
+        function calculateDetailedInvoiceData(invoice, monthOfInvoice) {
+            const costs = calculateInvoiceCosts(invoice, monthOfInvoice);
+            const projectId = getProjectId(invoice);
+            const wbsCode = standardizeWBS(projectId);
+            
+            console.log(`🔍 calculateDetailedInvoiceData for invoice: ${getInvoiceNumber(invoice)}`);
+            console.log(`🔍 Invoice fullInvoiceData:`, invoice.fullInvoiceData);
+            
+            // Calculate invoice hours breakdown
+            let invoiceInternalHours = 0;
+            let invoiceInternalCost = 0;
+            let invoiceExternalCost = 0;
+            
+            if (invoice.fullInvoiceData && Array.isArray(invoice.fullInvoiceData)) {
+                let lineItems = invoice.fullInvoiceData;
+                
+                // Handle nested structure if needed
+                if (lineItems.length === 1 && lineItems[0].fullInvoiceData && Array.isArray(lineItems[0].fullInvoiceData)) {
+                    console.log(`🔍 Using nested fullInvoiceData structure`);
+                    lineItems = lineItems[0].fullInvoiceData;
+                }
+                
+                console.log(`🔍 Processing ${lineItems.length} line items`);
+                
+                lineItems.forEach((item, index) => {
+                    const costType = item.typeCost || 'Unknown';
+                    const quantity = item.positionQuantity || 0;
+                    const total = item.positionTotal || 0;
+                    
+                    console.log(`🔍 Line item ${index}: costType=${costType}, quantity=${quantity}, total=${total}`);
+                    
+                    if (costType === 'Internal') {
+                        invoiceInternalHours += quantity;
+                        invoiceInternalCost += total;
+                    } else if (costType === 'External') {
+                        invoiceExternalCost += total;
+                    }
+                });
+                
+                console.log(`🔍 Invoice totals: Internal Hours=${invoiceInternalHours}, Internal Cost=${invoiceInternalCost}, External Cost=${invoiceExternalCost}`);
+            } else {
+                console.log(`❌ No fullInvoiceData available or not array`);
+            }
+            
+            // Calculate PPM hours breakdown
+            let ppmInternalHours = 0;
+            let ppmInternalCost = costs.internalCost;
+            
+            console.log(`🔍 PPM Hours Calculation: Starting with ppmInternalCost = ${ppmInternalCost}`);
+            
+            if (validationData.ppmData) {
+                // Support multi-month filtering for PPM hours (same as PPM cost)
+                const selectedMonths = window.selectedMonthsFilter || [monthOfInvoice];
+                const monthNames = selectedMonths.map(month => month ? month.split(' ')[0] : null).filter(Boolean);
+                console.log(`🔍 PPM Hours filtering for: WBS=${wbsCode}, Months=${monthNames.join(', ')}`);
+                
+                let ppmRowsChecked = 0;
+                let ppmRowsMatched = 0;
+                
+                validationData.ppmData.forEach(row => {
+                    const rowWbs = standardizeWBS(row['WBS Element ID'] || row['Project'] || row.project);
+                    const rowMonthOfInvoice = row['Month of invoice'];
+                    
+                    ppmRowsChecked++;
+                    
+                    // Check if row matches WBS and any of the selected months
+                    if (rowWbs === wbsCode && monthNames.includes(rowMonthOfInvoice)) {
+                        const cost = parseExcelNumericValue(row['Cost €']);
+                        
+                        // Look for hours directly in PPM data - try multiple possible column names
+                        let hours = parseExcelNumericValue(row['Hours']) || 
+                                   parseExcelNumericValue(row['hours']) || 
+                                   parseExcelNumericValue(row['Hrs']) || 
+                                   parseExcelNumericValue(row['hrs']) || 
+                                   parseExcelNumericValue(row['Quantity']) || 
+                                   parseExcelNumericValue(row['quantity']) ||
+                                   parseExcelNumericValue(row['Total']) ||
+                                   parseExcelNumericValue(row['total']) || 0;
+                        
+                        ppmRowsMatched++;
+                        console.log(`🔍 PPM Match ${ppmRowsMatched}:`, {
+                            cost: cost,
+                            hours: hours,
+                            'Available columns': Object.keys(row),
+                            user: row['User'] || 'Unknown',
+                            role: row['Role 2025'] || 'Unknown'
+                        });
+                        
+                        // Use hours directly from PPM data
+                        if (hours > 0) {
+                            ppmInternalHours += hours;
+                            console.log(`✅ Added ${hours} hours directly from PPM data. Total PPM hours: ${ppmInternalHours.toFixed(2)}`);
+                        } else {
+                            console.log(`❌ No hours found in PPM data for this row`);
+                        }
+                    }
+                });
+                
+                console.log(`📊 PPM Hours Summary: Checked ${ppmRowsChecked} rows, matched ${ppmRowsMatched} rows, total hours: ${ppmInternalHours.toFixed(2)}`);
+            } else {
+                console.log(`❌ No PPM data available for hours calculation`);
+            }
+            
+            return {
+                // Invoice data
+                invoiceInternalHours: invoiceInternalHours,
+                invoiceInternalCost: invoiceInternalCost,
+                invoiceExternalCost: invoiceExternalCost,
+                invoiceTotalCost: getInvoiceTotal(invoice),
+                
+                // PPM/SAP data
+                ppmInternalHours: ppmInternalHours,
+                ppmInternalCost: ppmInternalCost,
+                sapExternalCost: costs.externalCost,
+                ppmSapTotalCost: costs.totalCost,
+                
+                // Delta
+                delta: getInvoiceTotal(invoice) - costs.totalCost
+            };
         }
 
         // ===== PROJECT SELECTION AND FILTERING FUNCTIONALITY =====

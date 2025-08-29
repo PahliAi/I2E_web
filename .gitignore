@@ -36,3 +36,6 @@ npm-debug.log*
 # JSON files and helper python scripts
 *.json
 *.py
+
+# CLAUDE.md file
+CLAUDE.md

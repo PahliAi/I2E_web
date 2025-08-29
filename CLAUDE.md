@@ -151,3 +151,11 @@ All processing occurs client-side:
 - **Client-side memory limits** - large batches may cause performance issues
 - **Browser-specific storage** - data tied to specific browser instance
 - **Manual template sharing** - no automated template distribution system
+
+## Claude Code Guidelines
+
+### UX and Interaction Design
+- If you are in non-automatic mode then first explain what you want to do and only after approval do it. That is a better UX than having to click ESC each time
+
+### Working with Functions and Tools
+- Do NOT assume to know how a function you call is named and what the IO is, check to make sure.
